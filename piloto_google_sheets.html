@@ -871,7 +871,8 @@ grid.addEventListener('change', e=>{
     const expId = e.target.dataset.exp;
     const idx = parseInt(e.target.dataset.idx, 10);
     const d = DATA.find(x=>x.id===expId);
-    const itemText = d ? d.observaciones[idx] : '';
+    const item = d ? d.observaciones[idx] : null;
+    const itemText = item ? item.text : '';
     toggleItem(expId, idx, e.target.checked, itemText);
   }
 });
