@@ -131,7 +131,6 @@
     color:var(--ink);
     min-width:190px;
   }
-  #my-name{min-width:200px; border-color:var(--blueprint); background:var(--blueprint-soft);}
   select:focus, input:focus{
     outline:2px solid var(--blueprint);
     outline-offset:1px;
@@ -447,8 +446,8 @@
 
 <header class="top">
   <p class="title">Revisión de Expedientes</p>
-  <p class="subtitle">Piloto conectado a Google Sheets: lee el expediente en vivo y registra las subsanaciones de vuelta en el Sheet.</p>
-  <p class="hint">Marca cada punto como corregido cuando ya lo hayas resuelto, y usa "Avisar a" para notificar a Contratos por WhatsApp o correo.</p>
+  <p class="subtitle">Aquí puedes ver las observaciones que Contratos y Cobranzas encontró en tus expedientes de venta.</p>
+  <p class="hint">Marca cada punto como corregido cuando ya lo hayas subsanado, y usa "Avisar a" para notificar a Contratos por WhatsApp o correo.</p>
   <div class="corte">
     <span>Corte: <b>cierre de agosto 2026</b></span>
     <span>Expedientes: <b id="corte-total">—</b></span>
@@ -465,10 +464,6 @@
 </div>
 
 <div class="filters">
-  <div class="field">
-    <label for="my-name">Tu nombre</label>
-    <input type="text" id="my-name" placeholder="ej. Roberto Santisteban">
-  </div>
   <div class="field">
     <label for="f-jefe">Jefe de ventas</label>
     <select id="f-jefe"><option value="">Todos</option></select>
@@ -521,7 +516,6 @@ const DEMO_DATA = [{"id": "EXP-2026-001", "proyecto": "BRAVO", "unidad": "805", 
 const state = { jefe:"", vendedor:"", cliente:"", status:"" };
 let DATA = [];
 let checks = {};        // solo usado en modo demo (no persiste)
-let revisorName = "";
 let liveMode = false;
 
 let CONTACTS = [
@@ -532,7 +526,6 @@ let CONTACTS = [
 const jefeSelect = document.getElementById('f-jefe');
 const vendedorSelect = document.getElementById('f-vendedor');
 const clienteInput = document.getElementById('f-cliente');
-const nameInput = document.getElementById('my-name');
 const grid = document.getElementById('grid');
 const resultLine = document.getElementById('result-line');
 const noResults = document.getElementById('no-results');
@@ -697,10 +690,12 @@ async function refreshData(manual){
 /* ---------- Marcar como corregido ---------- */
 async function toggleItem(expId, idx, isChecked, itemText){
   const canWrite = !isPlaceholder(CONFIG.APPS_SCRIPT_URL);
+  const rec = DATA.find(x=>x.id===expId);
+  const revisorName = (rec && rec.vendedor) || 'Ventas';
   if (canWrite){
     const params = new URLSearchParams({
       id: expId, itemIndex: idx, texto: itemText,
-      revisor: revisorName || 'Ventas', accion: isChecked ? 'marcar' : 'desmarcar'
+      revisor: revisorName, accion: isChecked ? 'marcar' : 'desmarcar'
     });
     try{
       await fetch(CONFIG.APPS_SCRIPT_URL, {method:'POST', mode:'no-cors', body: params});
@@ -709,7 +704,7 @@ async function toggleItem(expId, idx, isChecked, itemText){
     setTimeout(()=>refreshData(false), 1500);
   } else {
     if (!checks[expId]) checks[expId] = {};
-    if (isChecked) checks[expId][idx] = { checked:true, by: revisorName || 'Ventas', at: new Date().toISOString() };
+    if (isChecked) checks[expId][idx] = { checked:true, by: revisorName, at: new Date().toISOString() };
     else delete checks[expId][idx];
     updateStats();
     render();
@@ -718,7 +713,7 @@ async function toggleItem(expId, idx, isChecked, itemText){
 
 /* ---------- Notificaciones (igual que antes) ---------- */
 function buildNotifyMessage(d, itemText){
-  const who = revisorName ? revisorName : (d.vendedor || 'Ventas');
+  const who = d.vendedor || 'Ventas';
   return `Hola, soy ${who}. Corregí un punto del expediente ${d.id} (${d.cliente} · ${d.proyecto} ${d.unidad}):\n"${itemText}"`;
 }
 function notifyLinksHtml(d, item){
@@ -851,7 +846,6 @@ function render(){
 jefeSelect.addEventListener('change', ()=>{ state.jefe = jefeSelect.value; refreshVendedorOptions(); render(); });
 vendedorSelect.addEventListener('change', ()=>{ state.vendedor = vendedorSelect.value; render(); });
 clienteInput.addEventListener('input', ()=>{ state.cliente = clienteInput.value; render(); });
-nameInput.addEventListener('change', ()=>{ revisorName = nameInput.value.trim(); });
 chips.forEach(chip=>{
   chip.addEventListener('click', ()=>{
     chips.forEach(c=>c.removeAttribute('data-active'));
