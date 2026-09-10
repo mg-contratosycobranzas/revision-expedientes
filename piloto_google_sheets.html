@@ -660,6 +660,8 @@ async function loadContacts(){
   }catch(e){ /* si falla, se mantienen los contactos que ya había */ }
 }
 
+let lastSnapshot = "";
+
 async function refreshData(manual){
   if (isPlaceholder(CONFIG.SHEET_CSV_URL)){
     liveMode = false;
@@ -681,10 +683,17 @@ async function refreshData(manual){
   }
   await loadContacts();
   document.getElementById('last-update').textContent = new Date().toLocaleTimeString('es-PE');
-  populateSelect(jefeSelect, uniqueSorted(DATA.map(d=>d.jefe)), 'Todos');
-  refreshVendedorOptions();
-  updateStats();
-  render();
+
+  const snapshot = JSON.stringify({ DATA, checks, CONTACTS });
+  const changed = snapshot !== lastSnapshot;
+  lastSnapshot = snapshot;
+
+  if (changed || manual){
+    populateSelect(jefeSelect, uniqueSorted(DATA.map(d=>d.jefe)), 'Todos');
+    refreshVendedorOptions();
+    updateStats();
+    render();
+  }
 }
 
 /* ---------- Marcar como corregido ---------- */
