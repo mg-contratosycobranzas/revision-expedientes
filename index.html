@@ -365,7 +365,7 @@ $('#bS').onclick=buscar;addEventListener('keydown',e=>{if(!T)return;if((e.ctrlKe
 /* ---------- detalle ---------- */
 const linkify=t=>esc(t).replace(/(https?:\/\/[^\s]+)/g,'<a href="$1" target="_blank" rel="noopener">📎 Ver adjunto</a>');
 let ADJ=null;
-async function abrir(id){const m=$('#mod'),s=$('#sheet');s.innerHTML='<div class="skel"></div><div class="skel"></div>';m.classList.add('on');ADJ=null;
+async function abrir(id){const m=$('#mod'),s=$('#sheet');s.innerHTML='<div class="skel"></div><div class="skel"></div>';m.classList.add('on');ADJ=null;const pF=!SALES.includes(U.rol)&&can('revisar')?call('ficha',T,id):null;if(pF)pF.catch(()=>{});   // la ficha se pide a la vez que el detalle
  try{const d=await call('detalle',T,id),x=d.exp,st=v=>v==='APROBADO'?'ok':v==='OBSERVADO'?'bad':'warn';
  const chat=[];if(x.obsSbs)chat.push(`<div class="bub l"><small>SBS</small>${esc(x.obsSbs)}</div>`);if(x.obsCtr)chat.push(`<div class="bub l"><small>Contractual</small>${esc(x.obsCtr)}</div>`);
  // subsanaciones rechazadas ("❌ Observado nuevamente") se ocultan: el vendedor solo ve lo vigente (quedan en el Sheet como historial)
@@ -422,7 +422,7 @@ async function abrir(id){const m=$('#mod'),s=$('#sheet');s.innerHTML='<div class
    $$('#fic [data-x]').forEach(el=>{el.oninput=el.onchange=()=>{const a=el.dataset.xa,k=el.dataset.x;if(k==='obs'){auto(a)}else TOQ[a][k]=1;if(el.tagName==='SELECT')el.className='fs '+fc(el.value)}});
    $$('#fic [data-n1]').forEach(b=>b.onclick=()=>{const a=b.dataset.n1,n=X(a,'nrev');n.value=(+n.value||0)+1;TOQ[a].nrev=1;vib(10)});
    $$('#fic [data-vok]').forEach(b=>b.onclick=()=>{const a=b.dataset.vok;$$(`#fic select[data-a="${a}"]`).forEach(s=>{if(!s.disabled&&(!s.value||s.value.toUpperCase()==='PENDIENTE')&&[...s.options].some(o=>o.value==='OK')){s.value='OK';s.className='fs ok'}});auto(a);vib(15)})};
-  call('ficha',T,id).then(f=>{FI=f;if(!f||(!f.CIERRE&&!f.SBS))throw 0;pintaF();$('#rvTxt').placeholder='Mensaje para el vendedor (opcional)…'}).catch(e=>{FI=null;$('#fic').innerHTML=`<div class="tip" style="border-left-color:var(--bad)"><b>⚠️ No se pudo abrir la ficha de CIERRE y SBS</b><div>${esc(e&&e.message?e.message:'El expediente no tiene fila en CIERRE ni en SBS.')}${e&&e.message?' · El Apps Script necesita Ficha.gs y una “Nueva versión” implementada.':''}</div></div>`;$('#rvOld').classList.remove('hide')});
+  (pF||call('ficha',T,id)).then(f=>{FI=f;if(!f||(!f.CIERRE&&!f.SBS))throw 0;pintaF();$('#rvTxt').placeholder='Mensaje para el vendedor (opcional)…'}).catch(e=>{FI=null;$('#fic').innerHTML=`<div class="tip" style="border-left-color:var(--bad)"><b>⚠️ No se pudo abrir la ficha de CIERRE y SBS</b><div>${esc(e&&e.message?e.message:'El expediente no tiene fila en CIERRE ni en SBS.')}${e&&e.message?' · El Apps Script necesita Ficha.gs y una “Nueva versión” implementada.':''}</div></div>`;$('#rvOld').classList.remove('hide')});
   const rvViejo=$('#rvGo').onclick;
   $('#rvGo').onclick=async ev=>{if(!FI)return rvViejo(ev);const b=$('#rvGo'),tx=$('#rvTxt').value.trim(),ex={};
    const cam=$$('#fic select[data-a]').filter(s=>!s.disabled&&s.value!==s.dataset.i).map(s=>({area:s.dataset.a,col:+s.dataset.c,valor:s.value}));
