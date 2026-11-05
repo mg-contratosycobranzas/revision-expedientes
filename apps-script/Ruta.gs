@@ -337,7 +337,18 @@ function agregarOpcion(token, campo, valor) {
  * Requisitos (una sola vez): API de Apps Script activada en script.google.com/home/usersettings,
  * los permisos script.projects y script.deployments en appsscript.json, y ejecutar autorizarActualizador(). */
 const ACT_REPO = 'https://raw.githubusercontent.com/mg-contratosycobranzas/revision-expedientes/main/apps-script/';
-const ACT_PROTEGIDOS = ['Code', 'appsscript'];
+const ACT_PROTEGIDOS = ['Code', 'appsscript', 'Clave'];
+/* FIRMA: solo se instala código firmado con la clave secreta de Clave.gs (ese archivo NUNCA está en GitHub).
+ * Quien llegue a controlar el repositorio de GitHub no puede instalar nada sin esa clave.
+ * manifest.json lleva sha256 de cada archivo y "firma" = HMAC-SHA256(clave, version|notas|Archivo:sha256,...). */
+const actHex_ = b => b.map(x => ('0' + (x & 255).toString(16)).slice(-2)).join('');
+const actSha_ = s => actHex_(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, s, Utilities.Charset.UTF_8));
+function actFirmaOk_(m) {
+  const k = typeof ACT_CLAVE_ === 'string' ? ACT_CLAVE_ : '';
+  if (k.length < 32) return false;
+  const base = [m.version, m.notas || '', (m.archivos || []).map(n => n + ':' + String((m.sha256 || {})[n] || '')).join(',')].join('|');
+  return typeof m.firma === 'string' && m.firma === actHex_(Utilities.computeHmacSha256Signature(base, k, Utilities.Charset.UTF_8));
+}
 try { ['sistemaEstado', 'actualizarSistema', 'revertirSistema'].forEach(f => { if (API_PUBLICA.indexOf(f) < 0) API_PUBLICA.push(f); }); } catch (e) {}
 
 function actApi_(metodo, ruta, cuerpo) {
@@ -345,9 +356,7 @@ function actApi_(metodo, ruta, cuerpo) {
   if (cuerpo) { op.contentType = 'application/json'; op.payload = JSON.stringify(cuerpo); }
   const r = UrlFetchApp.fetch('https://script.googleapis.com/v1/projects/' + ScriptApp.getScriptId() + ruta, op), c = r.getResponseCode(), t = r.getContentText();
   if (c >= 300) {
-    const g = (t.match(/"message":\s*"([^"]+)"/) || [])[1] || t.slice(0, 200);
-    if (/User has not enabled the Apps Script API/i.test(t)) throw new Error('Falta activar la "API de Google Apps Script" en script.google.com/home/usersettings (si ya está activada, espera unos minutos). Google: ' + g);
-    if (/has not been used in project|SERVICE_DISABLED|is disabled/i.test(t)) throw new Error('Google indica que la API no está habilitada para el proyecto de Cloud de este script. Google: ' + g);
+    if (/has not been used|is disabled|SERVICE_DISABLED|User has not enabled/i.test(t)) throw new Error('Falta activar la "API de Google Apps Script" en script.google.com/home/usersettings.');
     if (c === 403) throw new Error('Falta autorizar el actualizador: en el editor de Apps Script ejecuta autorizarActualizador una vez.');
     throw new Error('API de Apps Script (' + c + '): ' + t.slice(0, 180));
   }
@@ -358,9 +367,10 @@ function actGet_(archivo) {
   if (r.getResponseCode() !== 200) throw new Error('No pude descargar ' + archivo + ' de GitHub (' + r.getResponseCode() + ').');
   return r.getContentText();
 }
-function actManifest_() {
+function actManifest_(verificar) {
   const m = JSON.parse(actGet_('manifest.json'));
   (m.archivos || []).forEach(n => { if (!/^[A-Za-z0-9_]+$/.test(n) || ACT_PROTEGIDOS.indexOf(n) >= 0) throw new Error('Archivo no permitido en manifest: ' + n); });
+  if (verificar !== false && !actFirmaOk_(m)) throw new Error('La actualización ' + m.version + ' NO tiene una firma válida de Contratos y Cobranzas: no se instala.');
   return m;
 }
 const actIdDe_ = url => (String(url || '').match(/\/macros\/s\/([A-Za-z0-9_-]+)\//) || [])[1] || '';
@@ -373,8 +383,8 @@ function autorizarActualizador() {
 
 function sistemaEstado(token) {
   const u = sesion_(token); puede_(u, 'accesos');
-  const p = PropertiesService.getScriptProperties(), m = actManifest_();
-  return { instalada: p.getProperty('ACT_VER') || '(instalación manual)', disponible: m.version, notas: m.notas || '', archivos: m.archivos || [],
+  const p = PropertiesService.getScriptProperties(), m = actManifest_(false);
+  return { instalada: p.getProperty('ACT_VER') || '(instalación manual)', disponible: m.version, notas: (actFirmaOk_(m) ? '' : '⚠️ SIN FIRMA VÁLIDA (no se podrá instalar) · ') + (m.notas || ''), archivos: m.archivos || [], firmada: actFirmaOk_(m),
     anterior: p.getProperty('ACT_PREV') || '', fecha: p.getProperty('ACT_FECHA') || '' };
 }
 
@@ -390,6 +400,7 @@ function actualizarSistema(token, urlPortal) {
     const files = antes.files.map(limpio);
     m.archivos.forEach(n => {
       const src = actGet_(n + '.gs'); if (src.length < 50) throw new Error(n + '.gs llegó vacío.');
+      if (actSha_(src) !== String((m.sha256 || {})[n] || '')) throw new Error(n + '.gs no coincide con la versión firmada: no se instala.');
       const i = files.findIndex(f => f.name === n), nf = { name: n, type: 'SERVER_JS', source: src };
       if (i >= 0) files[i] = nf; else files.push(nf);
     });

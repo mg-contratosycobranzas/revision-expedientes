@@ -1,5 +1,11 @@
 {
-  "version": "2026.11.05-2",
-  "notas": "Ruta del file, anular cargo, agregar a listas y actualizador",
-  "archivos": ["Ruta"]
+  "version": "2026.11.05-3",
+  "notas": "Firma de seguridad: solo se instalan actualizaciones firmadas por Contratos y Cobranzas",
+  "archivos": [
+    "Ruta"
+  ],
+  "sha256": {
+    "Ruta": "7100a3f9af6fd50ce285ef2b8f37dc2207d2a6fbda72aa3f7adde0ac62ffca41"
+  },
+  "firma": "6de0825d07662d7e1eee7ec9bce9bf951dd1dc9dbb52dcb661c7a72a978d2039"
 }
