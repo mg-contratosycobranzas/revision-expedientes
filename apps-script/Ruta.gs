@@ -345,7 +345,9 @@ function actApi_(metodo, ruta, cuerpo) {
   if (cuerpo) { op.contentType = 'application/json'; op.payload = JSON.stringify(cuerpo); }
   const r = UrlFetchApp.fetch('https://script.googleapis.com/v1/projects/' + ScriptApp.getScriptId() + ruta, op), c = r.getResponseCode(), t = r.getContentText();
   if (c >= 300) {
-    if (/has not been used|is disabled|SERVICE_DISABLED|User has not enabled/i.test(t)) throw new Error('Falta activar la "API de Google Apps Script" en script.google.com/home/usersettings.');
+    const g = (t.match(/"message":\s*"([^"]+)"/) || [])[1] || t.slice(0, 200);
+    if (/User has not enabled the Apps Script API/i.test(t)) throw new Error('Falta activar la "API de Google Apps Script" en script.google.com/home/usersettings (si ya está activada, espera unos minutos). Google: ' + g);
+    if (/has not been used in project|SERVICE_DISABLED|is disabled/i.test(t)) throw new Error('Google indica que la API no está habilitada para el proyecto de Cloud de este script. Google: ' + g);
     if (c === 403) throw new Error('Falta autorizar el actualizador: en el editor de Apps Script ejecuta autorizarActualizador una vez.');
     throw new Error('API de Apps Script (' + c + '): ' + t.slice(0, 180));
   }
