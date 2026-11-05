@@ -6,7 +6,7 @@
  *    Reglas: la escala es la de "💰 Escala de comisiones" (COMISIONES en Code.gs). Solo cuentan DEPARTAMENTOS para el tramo.
  *    Financiamiento: AHORRO = plan de ahorros (50/50) · DIRECTO / HIPOTECARIO / CRÉDITO = 70/30 · CONTADO = 100%.
  *    Escrituras, bonos, adelantos y descuentos se llenan A MANO en las hojas antes de publicar.
- * 2) "Exportar formato" crea en Drive un Google Sheet con el formato del CIERRE DE MES (una pestaña por jefe, un bloque por vendedor).
+ * 2) "Exportar" arma el formato del CIERRE DE MES (una pestaña por jefe, un bloque por vendedor) y lo descarga en Excel o PDF.
  * 3) "Publicar": cada persona ve en el portal SOLO sus montos (vendedor: sus líneas; jefe: su comisión de equipo; gerente: la suya).
  */
 const HOJA_COM_DET = 'COMISIONES_DETALLE', HOJA_COM_RES = 'COMISIONES_RESUMEN', CARPETA_COM = 'COMISIONES - MG';
@@ -125,20 +125,17 @@ function comGenerar(token, cierre, forzar) {
   try {
     comBorrar_(h.d, r => mesNorm_(mesTxt_(r[0])) === cierre && norm_(r[14]) === 'AUTO');
     comBorrar_(h.r, r => mesNorm_(mesTxt_(r[0])) === cierre);
-    if (det.length) { const i = h.d.getLastRow() + 1; h.d.getRange(i, 1, det.length, COM_DET_HDR.length).setValues(det.map(fila_)); h.d.getRange(i, 1, det.length, 1).setNumberFormat('@'); }
+    if (det.length) { const i = h.d.getLastRow() + 1; h.d.getRange(i, 1, det.length, 1).setNumberFormat('@'); h.d.getRange(i, 1, det.length, COM_DET_HDR.length).setValues(det.map(fila_)); }
+    // comisión y pendiente del vendedor = suma de sus líneas del cierre (AUTO + las que agregaste a mano). Se calcula aquí
+    // (las fórmulas SUMIFS daban #ERROR! con la configuración en español del Sheet).
+    const suma = {}; comFilas_(h.d).forEach(r => { if (mesNorm_(mesTxt_(r[0])) !== cierre) return; const k = norm_(r[2]), s = suma[k] = suma[k] || [0, 0]; s[0] += Number(r[10]) || 0; s[1] += Number(r[11]) || 0; });
+    res.forEach(x => { if (x[1] === 'VENDEDOR') { const s = suma[norm_(x[2])] || [0, 0]; x[6] = s[0]; x[11] = s[1]; } });
     if (res.length) {
       const i = h.r.getLastRow() + 1;
       h.r.getRange(i, 1, res.length, 1).setNumberFormat('@');
       h.r.getRange(i, 1, res.length, COM_RES_HDR.length).setValues(res.map(x => x.map(c => c === null ? '' : seguro_(c))));
-      // fórmulas: comisión y pendiente del vendedor = suma de sus líneas (incluye las que agregues a mano); T. Pagar = comisión + bono − adelanto − dscto
-      res.forEach((x, k) => {
-        const f = i + k, D = "'" + HOJA_COM_DET + "'!";
-        if (x[1] === 'VENDEDOR') {
-          h.r.getRange(f, 7).setFormula('=SUMIFS(' + D + 'K:K,' + D + 'A:A,$A' + f + ',' + D + 'C:C,$C' + f + ')');
-          h.r.getRange(f, 12).setFormula('=SUMIFS(' + D + 'L:L,' + D + 'A:A,$A' + f + ',' + D + 'C:C,$C' + f + ')');
-        }
-        h.r.getRange(f, 11).setFormula('=N(G' + f + ')+N(H' + f + ')-N(I' + f + ')-N(J' + f + ')');
-      });
+      // T. Pagar = comisión + bono − adelanto − dscto (fórmula simple: se recalcula si llenas bono / adelanto / dscto a mano)
+      res.forEach((x, k) => { const f = i + k; h.r.getRange(f, 11).setFormula('=N(G' + f + ')+N(H' + f + ')-N(I' + f + ')-N(J' + f + ')'); });
     }
   } finally { lock.releaseLock(); }
   log_(u.nombre, 'COMISIONES_GENERADAS', cierre + ' · ' + depas.length + ' departamentos · ' + Object.keys(porV).length + ' vendedores' + (sinMod.length ? ' · revisar financiamiento: ' + sinMod.join(', ') : ''));
@@ -155,48 +152,136 @@ function comPublicar(token, cierre, publicar) {
   return { cierre: cierre, personas: n, publicado: !!publicar };
 }
 
-/** Crea en Drive un Google Sheet con el formato del CIERRE DE MES: una pestaña por jefe, un bloque por vendedor. */
-function comExportar(token, cierre) {
-  const u = sesion_(token); puede_(u, 'accesos');
-  cierre = mesNorm_(cierre); SpreadsheetApp.flush();
+/** FORMATO "CIERRE DE MES" (igual al Excel de Contratos y Cobranzas): una pestaña GRUPO <JEFE>, un bloque por vendedor.
+ *  Se arma en un Google Sheet de Drive (carpeta "COMISIONES - MG", uno por cierre, se reemplaza al volver a exportar)
+ *  y se descarga como Excel (editable) o PDF (para imprimir). Las sumas quedan como fórmulas simples (sin comas). */
+const COM_TELEFONO = '472-7813';
+const COM_COL = { naranja: '#F8CBAD', morado: '#78206E', amarillo: '#FFC000', verde: '#92D050', aviso: '#FFFF00', rojo: '#FF0000' };
+const COM_SOL = '"S/." #,##0.00;[Red]"S/." -#,##0.00';
+
+function comBloqueVendedor_(sh, f, p, lineas, cierre) {
+  const C = COM_COL, primero = comPrimerDia_(cierre);
+  // 1) nombre · mes · teléfono
+  sh.getRange(f, 2, 1, 10).setBackground(C.naranja);
+  sh.getRange(f, 3, 1, 3).merge().setValue(String(p[2]).toUpperCase()).setBackground(C.morado).setFontColor('#FFFFFF').setFontWeight('bold').setHorizontalAlignment('center');
+  sh.getRange(f, 6).setValue(primero).setNumberFormat('mmm-yy').setBackground(C.morado).setFontColor('#FFFFFF').setFontWeight('bold').setHorizontalAlignment('center');
+  sh.getRange(f, 9).setValue(COM_TELEFONO).setFontWeight('bold').setHorizontalAlignment('center');
+  f++;
+  // 2) cabecera en dos filas
+  sh.getRange(f, 2, 2, 10).setValues([
+    ['DPTO', 'EST/DEP', 'PROYECTO', 'CLIENTE', 'FECHA DE', 'FECHA DE', 'TIPO', 'MONTO', 'PENDIENTE', 'CONCEPTO'],
+    ['', '', '', '', 'MINUTA', 'ESCRITURA', 'FINANC.', 'COMISION S/.', '', '']])
+    .setBackground(C.naranja).setFontWeight('bold').setFontSize(10).setHorizontalAlignment('center').setVerticalAlignment('middle')
+    .setBorder(true, true, true, true, true, false);
+  [2, 3, 4, 5, 10, 11].forEach(c => sh.getRange(f, c, 2, 1).merge());
+  f += 2;
+  // 3) líneas
+  const ini = f;
+  if (lineas.length) {
+    sh.getRange(f, 2, lineas.length, 10).setValues(lineas.map(d => [txt_(d[3]), txt_(d[4]), txt_(d[5]), txt_(d[6]), d[7] instanceof Date ? d[7] : txt_(d[7]),
+      d[8] instanceof Date ? d[8] : txt_(d[8]), txt_(d[9]), Number(d[10]) || 0, Number(d[11]) || 0, txt_(d[12])]))
+      .setFontSize(9).setBorder(true, true, true, true, true, true).setVerticalAlignment('middle');
+    sh.getRange(f, 2, lineas.length, 3).setHorizontalAlignment('center');
+    sh.getRange(f, 6, lineas.length, 2).setNumberFormat('dd/mm/yyyy').setHorizontalAlignment('center');
+    sh.getRange(f, 8, lineas.length, 1).setHorizontalAlignment('center');
+    sh.getRange(f, 9, lineas.length, 2).setNumberFormat(COM_SOL);
+    f += lineas.length;
+  }
+  // 4) total de las líneas
+  const tot = f;
+  sh.getRange(f, 2).setValue('TOTAL').setFontWeight('bold');
+  sh.getRange(f, 9).setFormula(lineas.length ? '=SUM(I' + ini + ':I' + (f - 1) + ')' : '=0').setBackground(C.amarillo);
+  sh.getRange(f, 10).setFormula(lineas.length ? '=SUM(J' + ini + ':J' + (f - 1) + ')' : '=0');
+  sh.getRange(f, 9, 1, 2).setNumberFormat(COM_SOL).setFontWeight('bold').setBorder(true, true, true, true, true, false);
+  f += 2;
+  // 5) total por pagar
+  sh.getRange(f, 2).setValue('TOTAL POR PAGAR').setFontWeight('bold'); f++;
+  sh.getRange(f, 5, 1, 5).setValues([['COMISION', 'BONO(*)', 'ADELANTO', 'DSCTO', 'T.PAGAR']]).setFontWeight('bold').setHorizontalAlignment('center');
+  sh.getRange(f, 6).setFontColor(C.rojo); sh.getRange(f, 9).setBackground(C.verde); f++;
+  sh.getRange(f, 4).setValue(String(p[2]).toUpperCase()).setFontWeight('bold');
+  sh.getRange(f, 5).setFormula('=I' + tot);
+  sh.getRange(f, 6, 1, 3).setValues([[Number(p[7]) || 0, Number(p[8]) || 0, Number(p[9]) || 0]]);
+  sh.getRange(f, 9).setFormula('=E' + f + '+F' + f + '-G' + f + '-H' + f).setBackground(C.verde).setFontWeight('bold');
+  sh.getRange(f, 5, 1, 5).setNumberFormat(COM_SOL);
+  sh.getRange(f, 10).setValue(norm_(p[12]) === 'SI' ? 'PUBLICADO' : 'PROGRAMADO').setFontColor(C.rojo).setBackground(C.aviso).setFontWeight('bold').setHorizontalAlignment('center');
+  return f + 3;
+}
+function comBloqueJefe_(sh, f, jr, cierre) {
+  const C = COM_COL;
+  sh.getRange(f, 2, 1, 10).setBackground(C.naranja);
+  sh.getRange(f, 3, 1, 3).merge().setValue('JEFE DE VENTAS · ' + String(jr[2]).toUpperCase()).setBackground(C.morado).setFontColor('#FFFFFF').setFontWeight('bold').setHorizontalAlignment('center');
+  sh.getRange(f, 6).setValue(comPrimerDia_(cierre)).setNumberFormat('mmm-yy').setBackground(C.morado).setFontColor('#FFFFFF').setFontWeight('bold').setHorizontalAlignment('center');
+  f++;
+  sh.getRange(f, 3, 1, 8).setValues([['UNIDADES', 'TRAMO', 'COMISION (70%)', 'PENDIENTE (30%)', 'BONO(*)', 'ADELANTO', 'DSCTO', 'T.PAGAR']])
+    .setBackground(C.naranja).setFontWeight('bold').setFontSize(10).setHorizontalAlignment('center').setBorder(true, true, true, true, true, true); f++;
+  sh.getRange(f, 3, 1, 7).setValues([[jr[4], txt_(jr[5]), Number(jr[6]) || 0, Number(jr[11]) || 0, Number(jr[7]) || 0, Number(jr[8]) || 0, Number(jr[9]) || 0]]).setBorder(true, true, true, true, true, true).setHorizontalAlignment('center');
+  sh.getRange(f, 10).setFormula('=E' + f + '+G' + f + '-H' + f + '-I' + f).setBackground(C.verde).setFontWeight('bold').setBorder(true, true, true, true, false, false);
+  sh.getRange(f, 5, 1, 6).setNumberFormat(COM_SOL);
+  sh.getRange(f, 11).setValue(norm_(jr[12]) === 'SI' ? 'PUBLICADO' : 'PROGRAMADO').setFontColor(C.rojo).setBackground(C.aviso).setFontWeight('bold').setHorizontalAlignment('center');
+  return f + 3;
+}
+const comPrimerDia_ = c => { const p = c.split(' '); return new Date(Number(p[1]), MESES_.indexOf(p[0]), 1); };
+function comAnchos_(sh) {
+  [[1, 20], [2, 70], [3, 60], [4, 110], [5, 290], [6, 85], [7, 85], [8, 100], [9, 110], [10, 100], [11, 210]].forEach(x => sh.setColumnWidth(x[0], x[1]));
+  sh.setHiddenGridlines(true); sh.getRange('A:K').setFontFamily('Arial');
+}
+
+/** Arma (o reemplaza) el archivo del cierre en Drive. Devuelve el Spreadsheet. */
+function comArmar_(cierre) {
+  SpreadsheetApp.flush();
   const h = comHojas_(), det = comFilas_(h.d).filter(r => mesNorm_(mesTxt_(r[0])) === cierre), res = comFilas_(h.r).filter(r => mesNorm_(mesTxt_(r[0])) === cierre);
   if (!res.length) throw new Error('Primero genera las comisiones de ' + cierre + '.');
   const it = DriveApp.getFoldersByName(CARPETA_COM), carpeta = it.hasNext() ? it.next() : DriveApp.createFolder(CARPETA_COM);
-  const nuevo = SpreadsheetApp.create('COMISIONES - ' + cierre + ' (' + Utilities.formatDate(new Date(), 'America/Lima', 'dd-MM-yyyy HHmm') + ')');
-  DriveApp.getFileById(nuevo.getId()).moveTo(carpeta);
-  const jefes = [...new Set(res.filter(r => r[1] === 'VENDEDOR').map(r => String(r[3] || 'SIN JEFE')))].sort();
-  const azul = '#0C1A3D', gris = '#EEF1F8', num = '#,##0.00';
-  jefes.forEach((j, idx) => {
-    const sh = idx === 0 ? nuevo.getSheets()[0].setName('GRUPO ' + j.slice(0, 80)) : nuevo.insertSheet('GRUPO ' + j.slice(0, 80));
-    let f = 2;
-    res.filter(r => r[1] === 'VENDEDOR' && String(r[3] || 'SIN JEFE') === j).forEach(p => {
-      sh.getRange(f, 2, 1, 6).setValues([['VENDEDOR', '', String(p[2]), '', 'CIERRE ' + cierre, '']]).setFontWeight('bold'); f++;
-      sh.getRange(f, 2, 1, 10).setValues([['DPTO', 'EST / DEP', 'PROYECTO', 'CLIENTE', 'FECHA DE MINUTA', 'FECHA DE ESCRITURA', 'TIPO FINANC.', 'MONTO COMISIÓN S/.', 'PENDIENTE', 'CONCEPTO']])
-        .setFontWeight('bold').setBackground(azul).setFontColor('#FFFFFF').setWrap(true); f++;
-      const lineas = det.filter(d => norm_(d[2]) === norm_(p[2])), ini = f;
-      if (lineas.length) { sh.getRange(f, 2, lineas.length, 10).setValues(lineas.map(d => [d[3], d[4], d[5], d[6], d[7], d[8], d[9], Number(d[10]) || 0, Number(d[11]) || 0, d[12]])); f += lineas.length; }
-      sh.getRange(f, 2).setValue('TOTAL').setFontWeight('bold');
-      if (lineas.length) { sh.getRange(f, 9).setFormula('=SUM(I' + ini + ':I' + (f - 1) + ')'); sh.getRange(f, 10).setFormula('=SUM(J' + ini + ':J' + (f - 1) + ')'); }
-      sh.getRange(f, 2, 1, 10).setBackground(gris).setFontWeight('bold'); f += 2;
-      sh.getRange(f, 2).setValue('TOTAL POR PAGAR').setFontWeight('bold'); f++;
-      sh.getRange(f, 4, 1, 5).setValues([['COMISIÓN', 'BONO', 'ADELANTO', 'DSCTO', 'T. PAGAR']]).setFontWeight('bold').setBackground(azul).setFontColor('#FFFFFF'); f++;
-      sh.getRange(f, 3, 1, 6).setValues([[String(p[2]), Number(p[6]) || 0, Number(p[7]) || 0, Number(p[8]) || 0, Number(p[9]) || 0, Number(p[10]) || 0]]);
-      sh.getRange(f, 9).setValue(norm_(p[12]) === 'SI' ? 'PUBLICADO' : 'PROGRAMADO'); f += 3;
-    });
-    // comisión del jefe de ese grupo
-    const jr = res.find(r => r[1] === 'JEFE' && norm_(r[2]) === norm_(j));
-    if (jr) {
-      sh.getRange(f, 2).setValue('JEFE DE VENTAS · ' + j).setFontWeight('bold'); f++;
-      sh.getRange(f, 3, 1, 7).setValues([['UNIDADES (EQUIPO)', 'TRAMO', 'COMISIÓN (70%)', 'PENDIENTE (30%)', 'BONO', 'ADELANTO / DSCTO', 'T. PAGAR']]).setFontWeight('bold').setBackground(azul).setFontColor('#FFFFFF'); f++;
-      sh.getRange(f, 3, 1, 7).setValues([[jr[4], jr[5], Number(jr[6]) || 0, Number(jr[11]) || 0, Number(jr[7]) || 0, (Number(jr[8]) || 0) + (Number(jr[9]) || 0), Number(jr[10]) || 0]]); f += 2;
-    }
-    sh.getRange('E:E').setNumberFormat('@'); sh.getRange('F:G').setNumberFormat('dd/mm/yyyy'); sh.getRange('I:J').setNumberFormat(num);
-    sh.setColumnWidth(5, 280); sh.setColumnWidth(11, 200); sh.setFrozenRows(0);
+  const nombre = 'COMISIONES - ' + cierre, pr = PropertiesService.getScriptProperties(), clave = 'COM_EXP_' + cierre.replace(/\s/g, '_');
+  let libro = null;
+  try { const id = pr.getProperty(clave); if (id) { const fl = DriveApp.getFileById(id); if (!fl.isTrashed()) libro = SpreadsheetApp.openById(id); } } catch (e) { libro = null; }
+  if (!libro) { libro = SpreadsheetApp.create(nombre); DriveApp.getFileById(libro.getId()).moveTo(carpeta); pr.setProperty(clave, libro.getId()); }
+  // se vacía: queda una hoja temporal y se borran las demás
+  const tmp = libro.insertSheet('_tmp_' + Date.now()); libro.getSheets().forEach(s => { if (s.getSheetId() !== tmp.getSheetId()) libro.deleteSheet(s); });
+  const vend = res.filter(r => norm_(r[1]) === 'VENDEDOR'), jefes = [...new Set(vend.map(r => String(r[3] || '').trim() || 'SIN JEFE'))].sort();
+  jefes.forEach(j => {
+    const sh = libro.insertSheet(('GRUPO ' + j).toUpperCase().slice(0, 90), libro.getSheets().length);
+    comAnchos_(sh); let f = 2;
+    vend.filter(r => (String(r[3] || '').trim() || 'SIN JEFE') === j).forEach(p => { f = comBloqueVendedor_(sh, f, p, det.filter(d => norm_(d[2]) === norm_(p[2])), cierre); });
+    const jr = res.find(r => norm_(r[1]) === 'JEFE' && norm_(r[2]) === norm_(j)); if (jr) f = comBloqueJefe_(sh, f, jr, cierre);
   });
-  const g = res.find(r => r[1] === 'GERENTE');
-  if (g) { const sh = nuevo.insertSheet('GERENTE COMERCIAL'); sh.getRange(2, 2, 2, 5).setValues([['GERENTE', 'UNIDADES (EMPRESA)', 'COMISIÓN', 'BONO / AJUSTES', 'T. PAGAR'], [g[2], g[4], Number(g[6]) || 0, (Number(g[7]) || 0) - (Number(g[8]) || 0) - (Number(g[9]) || 0), Number(g[10]) || 0]]); sh.getRange(2, 2, 1, 5).setFontWeight('bold').setBackground(azul).setFontColor('#FFFFFF'); }
-  log_(u.nombre, 'COMISIONES_EXPORTADAS', cierre + ' · ' + nuevo.getName());
-  return { url: nuevo.getUrl(), nombre: nuevo.getName() };
+  const g = res.find(r => norm_(r[1]) === 'GERENTE');
+  if (g) {
+    const sh = libro.insertSheet('GERENTE COMERCIAL', libro.getSheets().length); comAnchos_(sh);
+    sh.getRange(2, 2, 1, 10).setBackground(COM_COL.naranja);
+    sh.getRange(2, 3, 1, 3).merge().setValue('GERENTE COMERCIAL · ' + String(g[2]).toUpperCase()).setBackground(COM_COL.morado).setFontColor('#FFFFFF').setFontWeight('bold').setHorizontalAlignment('center');
+    sh.getRange(2, 6).setValue(comPrimerDia_(cierre)).setNumberFormat('mmm-yy').setBackground(COM_COL.morado).setFontColor('#FFFFFF').setFontWeight('bold').setHorizontalAlignment('center');
+    sh.getRange(3, 3, 1, 6).setValues([['UNIDADES', 'COMISION', 'BONO(*)', 'ADELANTO', 'DSCTO', 'T.PAGAR']]).setBackground(COM_COL.naranja).setFontWeight('bold').setHorizontalAlignment('center').setBorder(true, true, true, true, true, true);
+    sh.getRange(4, 3, 1, 5).setValues([[g[4], Number(g[6]) || 0, Number(g[7]) || 0, Number(g[8]) || 0, Number(g[9]) || 0]]).setHorizontalAlignment('center').setBorder(true, true, true, true, true, true);
+    sh.getRange(4, 8).setFormula('=D4+E4-F4-G4').setBackground(COM_COL.verde).setFontWeight('bold').setBorder(true, true, true, true, false, false);
+    sh.getRange(4, 4, 1, 5).setNumberFormat(COM_SOL);
+  }
+  libro.deleteSheet(tmp);
+  if (libro.getName() !== nombre) libro.rename(nombre);
+  SpreadsheetApp.flush();
+  return libro;
+}
+/** Descarga del archivo de Drive como Excel o PDF (A4 horizontal, ajustado al ancho, sin cuadrícula). */
+function comDescarga_(libro, formato, nombre) {
+  const base = 'https://docs.google.com/spreadsheets/d/' + libro.getId() + '/export?format=';
+  const url = formato === 'pdf'
+    ? base + 'pdf&size=A4&portrait=false&scale=2&gridlines=false&printtitle=false&sheetnames=false&pagenum=UNDEFINED&fzr=false&horizontal_alignment=CENTER&top_margin=0.4&bottom_margin=0.4&left_margin=0.3&right_margin=0.3'
+    : base + 'xlsx';
+  const r = UrlFetchApp.fetch(url, { headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true });
+  if (r.getResponseCode() !== 200) throw new Error('Google no pudo convertir el archivo a ' + (formato === 'pdf' ? 'PDF' : 'Excel') + ' (código ' + r.getResponseCode() + '). Intenta de nuevo en un minuto.');
+  return { nombre: nombre + (formato === 'pdf' ? '.pdf' : '.xlsx'), tipo: formato === 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', b64: Utilities.base64Encode(r.getBlob().getBytes()) };
+}
+/** Exporta el cierre en el formato CIERRE DE MES. formato: 'xlsx' (Excel editable) · 'pdf' (imprimir) · vacío (solo el Google Sheet). */
+function comExportar(token, cierre, formato) {
+  const u = sesion_(token); puede_(u, 'accesos');
+  cierre = mesNorm_(cierre); if (!/^[A-Z]+ \d{4}$/.test(cierre)) throw new Error('Elige un cierre válido.');
+  formato = formato === 'pdf' || formato === 'xlsx' ? formato : '';
+  const lock = LockService.getScriptLock(); lock.waitLock(30000);
+  let libro; try { libro = comArmar_(cierre); } finally { lock.releaseLock(); }
+  log_(u.nombre, 'COMISIONES_EXPORTADAS', cierre + (formato ? ' · ' + formato.toUpperCase() : ' · Google Sheet'));
+  const out = { url: libro.getUrl(), nombre: libro.getName() };
+  if (formato) out.archivo = comDescarga_(libro, formato, libro.getName());
+  return out;
 }
 
 /* ---------- lo que ve cada persona (solo lo publicado y solo lo suyo) ---------- */
