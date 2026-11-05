@@ -12,10 +12,10 @@
 const HOJA_COM_DET = 'COMISIONES_DETALLE', HOJA_COM_RES = 'COMISIONES_RESUMEN', CARPETA_COM = 'COMISIONES - MG';
 const COM_DET_HDR = ['Cierre', 'Jefe de ventas', 'Vendedor', 'Dpto', 'Est / Dep', 'Proyecto', 'Cliente', 'Fecha minuta', 'Fecha escritura', 'Tipo financ.', 'Monto comisión S/', 'Pendiente S/', 'Concepto', 'ID expediente', 'Origen'];
 const COM_RES_HDR = ['Cierre', 'Rol', 'Persona', 'Jefe de ventas', 'Unidades', 'Tramo', 'Comisión S/', 'Bono S/', 'Adelanto S/', 'Dscto S/', 'T. Pagar S/', 'Pendiente S/', 'Publicado', 'Generado'];
-const COM_FN = ['comEstado', 'comGenerar', 'comPublicar', 'comExportar', 'misComisiones'];
+const COM_FN = ['comEstado', 'comPrevisualizar', 'comGenerar', 'comPublicar', 'comExportar', 'misComisiones'];
 try {
   COM_FN.forEach(f => { if (API_PUBLICA.indexOf(f) < 0) API_PUBLICA.push(f); });
-  ['comEstado', 'misComisiones'].forEach(f => { if (SOLO_LECTURA.indexOf(f) < 0) SOLO_LECTURA.push(f); });
+  ['comEstado', 'comPrevisualizar', 'misComisiones'].forEach(f => { if (SOLO_LECTURA.indexOf(f) < 0) SOLO_LECTURA.push(f); });
 } catch (e) {}
 
 /* ---------- escala (sale de la misma tabla que ve cada rol en Ayuda) ---------- */
@@ -72,12 +72,10 @@ function comEstado(token) {
   return { cierres: comCierres_(), estado: Object.keys(est).map(k => est[k]), hoja: ss_().getUrl() + '#gid=' + h.r.getSheetId(), hojaDetalle: ss_().getUrl() + '#gid=' + h.d.getSheetId() };
 }
 
-function comGenerar(token, cierre, forzar) {
-  const u = sesion_(token); puede_(u, 'accesos');
-  cierre = mesNorm_(cierre); if (!/^[A-Z]+ \d{4}$/.test(cierre)) throw new Error('Elige un cierre válido (por ejemplo OCTUBRE 2026).');
-  const esc = comEscala_(), h = comHojas_();
+/** Cálculo del cierre SIN escribir nada (lo usan la vista previa y Generar). */
+function comCalcular_(cierre, h) {
+  const esc = comEscala_();
   const previos = comFilas_(h.r).filter(r => mesNorm_(mesTxt_(r[0])) === cierre);
-  if (previos.some(r => norm_(r[12]) === 'SI') && !forzar) throw new Error('El cierre ' + cierre + ' ya está PUBLICADO. Despublícalo primero si quieres regenerarlo.');
   // lo manual se conserva: bono / adelanto / dscto por persona y las líneas del detalle que no son AUTO (escrituras, ajustes)
   const manual = {}; previos.forEach(r => { manual[norm_(r[1]) + '|' + norm_(r[2])] = [r[7], r[8], r[9]]; });
 
@@ -119,6 +117,33 @@ function comGenerar(token, cierre, forzar) {
     const nombre = g ? String(g[0]).trim() : 'GERENTE COMERCIAL', m = manual['GERENTE|' + norm_(nombre)] || ['', '', ''], porU = Number((esc.gerente.f[0] || [])[1]) || 0;
     res.push([cierre, 'GERENTE', nombre, '', depas.length, 'Por unidad', depas.length * porU, m[0], m[1], m[2], null, 0, 'NO', ahora]);
   }
+  return { det: det, res: res, depas: depas, porV: porV, sinMod: sinMod, previos: previos };
+}
+const comCierreOk_ = c => { c = mesNorm_(c); if (!/^[A-Z]+ \d{4}$/.test(c)) throw new Error('Elige un cierre válido (por ejemplo OCTUBRE 2026).'); return c; };
+
+/** VISTA PREVIA: lo que saldría al generar, por vendedor (incluye las líneas que agregaste a mano). No escribe en el Sheet. */
+function comPrevisualizar(token, cierre) {
+  const u = sesion_(token); puede_(u, 'accesos');
+  cierre = comCierreOk_(cierre);
+  const h = comHojas_(), c = comCalcular_(cierre, h), n = x => Number(x) || 0;
+  const lineas = c.det.concat(comFilas_(h.d).filter(r => mesNorm_(mesTxt_(r[0])) === cierre && norm_(r[14]) !== 'AUTO'));
+  const linea = d => ({ dpto: txt_(d[3]), est: txt_(d[4]), proyecto: txt_(d[5]), cliente: txt_(d[6]), minuta: txt_(d[7]), escritura: txt_(d[8]), fin: txt_(d[9]),
+    monto: n(d[10]), pendiente: n(d[11]), concepto: txt_(d[12]), id: txt_(d[13]), manual: norm_(d[14]) !== 'AUTO' });
+  const personas = c.res.map(x => {
+    const v = norm_(x[1]) === 'VENDEDOR', l = v ? lineas.filter(d => norm_(d[2]) === norm_(x[2])).map(linea) : [];
+    const com = v ? l.reduce((a, d) => a + d.monto, 0) : n(x[6]), pen = v ? l.reduce((a, d) => a + d.pendiente, 0) : n(x[11]);
+    return { rol: x[1], nombre: x[2], jefe: x[3], unidades: x[4], tramo: txt_(x[5]), comision: com, bono: n(x[7]), adelanto: n(x[8]), dscto: n(x[9]),
+      pendiente: pen, total: com + n(x[7]) - n(x[8]) - n(x[9]), lineas: l };
+  });
+  return { cierre: cierre, departamentos: c.depas.length, vendedores: Object.keys(c.porV).length, revisar: c.sinMod, yaGenerado: c.previos.length > 0,
+    publicado: c.previos.some(r => norm_(r[12]) === 'SI'), total: personas.reduce((a, p) => a + p.total, 0), personas: personas };
+}
+
+function comGenerar(token, cierre, forzar) {
+  const u = sesion_(token); puede_(u, 'accesos');
+  cierre = comCierreOk_(cierre);
+  const h = comHojas_(), c = comCalcular_(cierre, h), det = c.det, res = c.res, depas = c.depas, porV = c.porV, sinMod = c.sinMod;
+  if (c.previos.some(r => norm_(r[12]) === 'SI') && !forzar) throw new Error('El cierre ' + cierre + ' ya está PUBLICADO. Despublícalo primero si quieres regenerarlo.');
 
   // escribe: borra lo AUTO del cierre (lo manual del detalle se queda) y el resumen del cierre
   const lock = LockService.getScriptLock(); lock.waitLock(30000);
