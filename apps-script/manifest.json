@@ -1,11 +1,13 @@
 {
-  "version": "2026.11.05-3",
-  "notas": "Firma de seguridad: solo se instalan actualizaciones firmadas por Contratos y Cobranzas",
+  "version": "2026.11.05-4",
+  "notas": "Comisiones del cierre: generar desde BASE MAESTRA, exportar formato, publicar y Mis comisiones",
   "archivos": [
-    "Ruta"
+    "Ruta",
+    "Comisiones"
   ],
   "sha256": {
-    "Ruta": "7100a3f9af6fd50ce285ef2b8f37dc2207d2a6fbda72aa3f7adde0ac62ffca41"
+    "Ruta": "7100a3f9af6fd50ce285ef2b8f37dc2207d2a6fbda72aa3f7adde0ac62ffca41",
+    "Comisiones": "87d9ad7e4ec9b1df7d114e0ce2a93b6673c9eeb51b3397b0da282b3802744c2a"
   },
-  "firma": "6de0825d07662d7e1eee7ec9bce9bf951dd1dc9dbb52dcb661c7a72a978d2039"
+  "firma": "e33e602baac8608522f0c551b95dd67644da53e0146d502085a7a37621c0ca4b"
 }
