@@ -231,11 +231,15 @@ function comArmar_(cierre) {
   SpreadsheetApp.flush();
   const h = comHojas_(), det = comFilas_(h.d).filter(r => mesNorm_(mesTxt_(r[0])) === cierre), res = comFilas_(h.r).filter(r => mesNorm_(mesTxt_(r[0])) === cierre);
   if (!res.length) throw new Error('Primero genera las comisiones de ' + cierre + '.');
-  const it = DriveApp.getFoldersByName(CARPETA_COM), carpeta = it.hasNext() ? it.next() : DriveApp.createFolder(CARPETA_COM);
   const nombre = 'COMISIONES - ' + cierre, pr = PropertiesService.getScriptProperties(), clave = 'COM_EXP_' + cierre.replace(/\s/g, '_');
   let libro = null;
-  try { const id = pr.getProperty(clave); if (id) { const fl = DriveApp.getFileById(id); if (!fl.isTrashed()) libro = SpreadsheetApp.openById(id); } } catch (e) { libro = null; }
-  if (!libro) { libro = SpreadsheetApp.create(nombre); DriveApp.getFileById(libro.getId()).moveTo(carpeta); pr.setProperty(clave, libro.getId()); }
+  // se reutiliza el archivo del cierre (solo con SpreadsheetApp: no depende de que el servicio Drive esté habilitado en el proyecto)
+  try { const id = pr.getProperty(clave); if (id) libro = SpreadsheetApp.openById(id); } catch (e) { libro = null; }
+  if (!libro) {
+    libro = SpreadsheetApp.create(nombre); pr.setProperty(clave, libro.getId());
+    try { const it = DriveApp.getFoldersByName(CARPETA_COM), carpeta = it.hasNext() ? it.next() : DriveApp.createFolder(CARPETA_COM); DriveApp.getFileById(libro.getId()).moveTo(carpeta); }
+    catch (e) { /* sin Drive: el archivo queda en "Mi unidad" */ }
+  }
   // se vacía: queda una hoja temporal y se borran las demás
   const tmp = libro.insertSheet('_tmp_' + Date.now()); libro.getSheets().forEach(s => { if (s.getSheetId() !== tmp.getSheetId()) libro.deleteSheet(s); });
   const vend = res.filter(r => norm_(r[1]) === 'VENDEDOR'), jefes = [...new Set(vend.map(r => String(r[3] || '').trim() || 'SIN JEFE'))].sort();

@@ -1,6 +1,6 @@
 {
-  "version": "2026.11.05-7",
-  "notas": "Comisiones: formato CIERRE DE MES por vendedor con descarga Excel y PDF; corrige #ERROR! del resumen",
+  "version": "2026.11.05-8",
+  "notas": "Comisiones: exportar Excel/PDF sin depender del servicio Drive (corrige \"Permiso denegado al habilitar APIs: drive\")",
   "archivos": [
     "Ruta",
     "Comisiones",
@@ -9,9 +9,9 @@
   ],
   "sha256": {
     "Ruta": "7100a3f9af6fd50ce285ef2b8f37dc2207d2a6fbda72aa3f7adde0ac62ffca41",
-    "Comisiones": "2c175b6e457189eadcf3069beb1db0867002367e609761a697680efa84dac925",
+    "Comisiones": "aaa07c4d424991dc0a3f0ba0fec7e0ffa858eac94b927a2a8206c04b6c2fdbd2",
     "Ayuda": "0f3a579cd0f522a678c9b16e0e61ea44b2683da551b5e964e7b2d6000c73c467",
     "Seguimiento": "fa95c9c531a5ad4bce253a381eb167694009a42a1e90cb423b028e085cd8f199"
   },
-  "firma": "f1110c25940413037c463a86a6b945cd5a68b727c52b09cfee034563afa8b09d"
+  "firma": "6fcbf52f54e3004e8c2ee120d6046715945885794ae9c7a3a53d1669653fdae2"
 }
