@@ -689,7 +689,7 @@ async function rutaForm(o){const s=$('#sheet');let R;try{R=await rOpc()}catch(e)
  <details style="margin-top:10px"><summary class="mut">➕ Datos opcionales (si ya los tienes)</summary>
  <label class="l" for="rDni">DNI / CE / RUC</label><input id="rDni" inputmode="numeric" maxlength="11" value="${esc(d.dni||'')}" placeholder="12345678"><div class="hint" id="rDh"></div>
  <div class="g2">${sel('rTc','Tipo de cliente',Object.keys(R.tipos),d.tipoCliente,R.tipos)}${sel('rFi','Financiamiento',Object.keys(R.fin),d.fin,R.fin)}</div></details>
- <p><button class="btn big" id="rGo">📣 Avisar y dejar el file a la asistente</button></p><p><button class="btn sec big" id="rBk">← Mis ventas avisadas</button></p>`;
+ <p><button class="btn big" id="rGo">📣 Enviar aviso de venta</button></p><p><button class="btn sec big" id="rBk">← Mis ventas avisadas</button></p>`;
  $$('#rSit [data-sit]').forEach(b=>b.onclick=()=>{d.situacion=b.dataset.sit;$$('#rSit [data-sit]').forEach(x=>{x.classList.toggle('ok',x===b);x.classList.toggle('sec',x!==b)});vib(8)});
  rX();const chk=()=>{const k=kVta({proyecto:$('#rPro').value,unidad:$('#rUni').value}),e=k?DATA.filter(x=>kVta(x)===k):[];$('#rUh').innerHTML=e.length?'<span class="badt">⚠️ Esta unidad ya está registrada: '+e.map(x=>esc(x.id)+' · '+esc(x.cliente)).join(', ')+'</span>':'';const L=$('#rDni').value.replace(/\D/g,'').length;$('#rDh').innerHTML=!L?'':[8,9,11].includes(L)?'<span class="good">✔ '+(L===8?'DNI':L===9?'CE':'RUC')+' válido</span>':'<span class="badt">'+L+' dígitos · debe tener 8, 9 u 11</span>'};
  ['#rUni','#rPro','#rDni'].forEach(i=>{$(i).oninput=chk;$(i).onchange=chk});chk();$('#rBk').onclick=rutaVend;
