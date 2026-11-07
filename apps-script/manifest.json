@@ -1,17 +1,19 @@
 {
-  "version": "2026.11.05-9",
-  "notas": "Comisiones: vista previa por vendedor antes de generar (no guarda nada hasta confirmar)",
+  "version": "2026.11.06-1",
+  "notas": "Subsanación por punto: Comercial marca varios puntos en un envío y Contratos aprueba o devuelve cada uno; el expediente ya no se cierra",
   "archivos": [
     "Ruta",
     "Comisiones",
     "Ayuda",
-    "Seguimiento"
+    "Seguimiento",
+    "Puntos"
   ],
   "sha256": {
     "Ruta": "7100a3f9af6fd50ce285ef2b8f37dc2207d2a6fbda72aa3f7adde0ac62ffca41",
     "Comisiones": "d848dfeb36c98be78e32c5f629d4c1357ae10997bad40cb5422f432c459d68b7",
     "Ayuda": "0f3a579cd0f522a678c9b16e0e61ea44b2683da551b5e964e7b2d6000c73c467",
-    "Seguimiento": "fa95c9c531a5ad4bce253a381eb167694009a42a1e90cb423b028e085cd8f199"
+    "Seguimiento": "fa95c9c531a5ad4bce253a381eb167694009a42a1e90cb423b028e085cd8f199",
+    "Puntos": "2d1cc33a18bf661365c235cb3d572e0c5239a75bfa8d489d3bc950863639df38"
   },
-  "firma": "9cae4e75b3a3a33fd5335217b0375c3ddf9d59ac7db7195fbea771dc11fd88f6"
+  "firma": "ca2336ddf61abe8b579c205768ec2fd90b7aca4ad0bbaa04f67a928c1e0d789b"
 }
