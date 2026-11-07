@@ -10,9 +10,12 @@
  * 3) "Publicar": cada persona ve en el portal SOLO sus montos (vendedor: sus líneas; jefe: su comisión de equipo; gerente: la suya).
  */
 const HOJA_COM_DET = 'COMISIONES_DETALLE', HOJA_COM_RES = 'COMISIONES_RESUMEN', CARPETA_COM = 'COMISIONES - MG';
-const COM_DET_HDR = ['Cierre', 'Jefe de ventas', 'Vendedor', 'Dpto', 'Est / Dep', 'Proyecto', 'Cliente', 'Fecha minuta', 'Fecha escritura', 'Tipo financ.', 'Monto comisión S/', 'Pendiente S/', 'Concepto', 'ID expediente', 'Origen'];
+const COM_DET_HDR = ['Cierre', 'Jefe de ventas', 'Vendedor', 'Dpto', 'Est / Dep', 'Proyecto', 'Cliente', 'Fecha minuta', 'Fecha escritura', 'Tipo financ.', 'Monto comisión S/', 'Pendiente S/', 'Concepto', 'ID expediente', 'Origen', 'Subsanación'];
+// Ventas que pasan al mes siguiente porque se subsanaron fuera de fecha (o no se subsanaron): se pagan en el cierre "Pasa a"
+const HOJA_COM_DIF = 'COMISIONES_DIFERIDOS';
+const COM_DIF_HDR = ['Cierre origen', 'ID expediente', 'Vendedor', 'Jefe', 'Decisión', 'Pasa a', 'Monto S/', 'Pendiente S/', 'Dpto', 'Proyecto', 'Cliente', 'Fecha minuta', 'Tipo financ.', 'Subsanación', 'Decidió', 'Fecha'];
 const COM_RES_HDR = ['Cierre', 'Rol', 'Persona', 'Jefe de ventas', 'Unidades', 'Tramo', 'Comisión S/', 'Bono S/', 'Adelanto S/', 'Dscto S/', 'T. Pagar S/', 'Pendiente S/', 'Publicado', 'Generado'];
-const COM_FN = ['comEstado', 'comPrevisualizar', 'comGenerar', 'comPublicar', 'comExportar', 'misComisiones'];
+const COM_FN = ['comEstado', 'comPrevisualizar', 'comDecidir', 'comGenerar', 'comPublicar', 'comExportar', 'misComisiones'];
 try {
   COM_FN.forEach(f => { if (API_PUBLICA.indexOf(f) < 0) API_PUBLICA.push(f); });
   ['comEstado', 'comPrevisualizar', 'misComisiones'].forEach(f => { if (SOLO_LECTURA.indexOf(f) < 0) SOLO_LECTURA.push(f); });
@@ -48,7 +51,48 @@ function comHojas_() {
   const hdr = (h, cab) => { h.getRange(1, 1, 1, cab.length).setValues([cab]).setFontWeight('bold').setBackground('#0C1A3D').setFontColor('#FFFFFF'); h.setFrozenRows(1); };
   if (!d) { d = ss.insertSheet(HOJA_COM_DET); hdr(d, COM_DET_HDR); d.getRange('H:I').setNumberFormat('dd/mm/yyyy'); d.getRange('K:L').setNumberFormat('#,##0.00'); }
   if (!r) { r = ss.insertSheet(HOJA_COM_RES); hdr(r, COM_RES_HDR); r.getRange('G:L').setNumberFormat('#,##0.00'); }
-  return { d: d, r: r };
+  if (String(d.getRange(1, COM_DET_HDR.length).getValue()) !== COM_DET_HDR[COM_DET_HDR.length - 1]) hdr(d, COM_DET_HDR);   // columna nueva "Subsanación"
+  let f = ss.getSheetByName(HOJA_COM_DIF);
+  if (!f) { f = ss.insertSheet(HOJA_COM_DIF); hdr(f, COM_DIF_HDR); f.getRange('G:H').setNumberFormat('#,##0.00'); }
+  return { d: d, r: r, f: f };
+}
+const comSig_ = c => { const p = c.split(' '), m = MESES_.indexOf(p[0]); return m === 11 ? MESES_[0] + ' ' + (Number(p[1]) + 1) : MESES_[m + 1] + ' ' + p[1]; };
+const comDM_ = d => d instanceof Date ? Utilities.formatDate(d, 'America/Lima', 'dd/MM') : '';
+/** Subsanación de cada expediente del cierre frente al plazo "Comercial presenta subsanados" del CALENDARIO.
+ *  SIN OBS. · EN FECHA dd/mm · FUERA dd/mm · SIN SUBSANAR (plazo vencido y sigue observado) · POR SUBSANAR (aún en plazo) */
+function comSubs_(token, cierre) {
+  const out = {}, su = ss_().getSheetByName(HOJA_SUB), lim = typeof plazo_ === 'function' ? plazo_(cierre, 'X') : null, vencido = !!(lim && new Date() > lim);
+  const filas = su && su.getLastRow() >= 2 ? su.getRange(2, 1, su.getLastRow() - 1, 9).getValues() : [];
+  const ven = {}; filas.forEach(r => { if (!(r[0] instanceof Date) || !/\(Ventas\)/.test(String(r[4]))) return; (ven[String(r[1]).trim()] = ven[String(r[1]).trim()] || []).push(r); });
+  let exps = []; try { exps = misExpedientes(token); } catch (e) {}
+  const est = {}; exps.forEach(x => est[x.id] = x.estado);
+  return id => {
+    if (out[id]) return out[id];
+    const l = ven[id] || [], fuera = l.find(r => /Fuera de plazo/i.test(String(r[8])) || (lim && r[0] > lim));
+    let o;
+    if (fuera) o = { tipo: 'FUERA', txt: 'FUERA ' + comDM_(fuera[0]) };
+    else if (l.length) o = { tipo: 'EN FECHA', txt: 'EN FECHA ' + comDM_(l[l.length - 1][0]) };
+    else if (est[id] === 'OBSERVADO') o = vencido ? { tipo: 'SIN SUBSANAR', txt: 'SIN SUBSANAR' } : { tipo: 'POR SUBSANAR', txt: 'POR SUBSANAR' };
+    else o = { tipo: 'SIN OBS.', txt: 'SIN OBS.' };
+    o.pasa = o.tipo === 'FUERA' || o.tipo === 'SIN SUBSANAR';   // por defecto pasa al siguiente mes (tú lo cambias en la vista previa)
+    return (out[id] = o);
+  };
+}
+function comDifFilas_(h) { return comFilas_(h.f).map((r, i) => ({ fila: i + 2, r: r })); }
+
+/** Vista previa: pagar la venta en este cierre o pasarla al siguiente mes (queda en COMISIONES_DIFERIDOS). */
+function comDecidir(token, cierre, id, decision) {
+  const u = sesion_(token); puede_(u, 'accesos');
+  cierre = comCierreOk_(cierre); id = String(id || '').trim(); decision = decision === 'PASA' ? 'PASA' : 'PAGA';
+  const h = comHojas_(), x = comDifFilas_(h).find(z => mesNorm_(mesTxt_(z.r[0])) === cierre && String(z.r[1]).trim() === id);
+  const lock = LockService.getScriptLock(); lock.waitLock(20000);
+  try {
+    if (x) { h.f.getRange(x.fila, 6).setNumberFormat('@'); h.f.getRange(x.fila, 5, 1, 2).setValues([[decision, decision === 'PASA' ? comSig_(cierre) : '']]); h.f.getRange(x.fila, 15, 1, 2).setValues([[u.nombre, new Date()]]); }
+    else { const row = new Array(COM_DIF_HDR.length).fill(''); row[0] = cierre; row[1] = id; row[4] = decision; row[5] = decision === 'PASA' ? comSig_(cierre) : ''; row[14] = u.nombre; row[15] = new Date();
+      const i = h.f.getLastRow() + 1; h.f.getRange(i, 1).setNumberFormat('@'); h.f.getRange(i, 6).setNumberFormat('@'); h.f.getRange(i, 1, 1, row.length).setValues([fila_(row)]); }
+  } finally { lock.releaseLock(); }
+  log_(u.nombre, 'COMISION_' + decision, cierre + ' · ' + id);
+  return { id: id, decision: decision, pasaA: decision === 'PASA' ? comSig_(cierre) : '' };
 }
 const comFilas_ = h => h.getLastRow() < 2 ? [] : h.getRange(2, 1, h.getLastRow() - 1, h.getLastColumn()).getValues();
 function comBorrar_(h, pred) {   // borra de abajo hacia arriba las filas que cumplen pred
@@ -73,15 +117,16 @@ function comEstado(token) {
 }
 
 /** Cálculo del cierre SIN escribir nada (lo usan la vista previa y Generar). */
-function comCalcular_(cierre, h) {
-  const esc = comEscala_();
+function comCalcular_(cierre, h, token) {
+  const esc = comEscala_(), SUB = comSubs_(token, cierre), sig = comSig_(cierre), info = {};
+  const difs = comDifFilas_(h), decide = {}; difs.forEach(z => { if (mesNorm_(mesTxt_(z.r[0])) === cierre) decide[String(z.r[1]).trim()] = norm_(z.r[4]); });
   const previos = comFilas_(h.r).filter(r => mesNorm_(mesTxt_(r[0])) === cierre);
   // lo manual se conserva: bono / adelanto / dscto por persona y las líneas del detalle que no son AUTO (escrituras, ajustes)
   const manual = {}; previos.forEach(r => { manual[norm_(r[1]) + '|' + norm_(r[2])] = [r[7], r[8], r[9]]; });
 
   const bm = ss_().getSheetByName(HOJA_BM), v = bm.getRange(PRIMERA_FILA, 1, ULTIMA_FILA - PRIMERA_FILA + 1, 24).getValues();
   const filas = v.filter(r => r[22] && mesNorm_(mesTxt_(r[3])) === cierre);
-  if (!filas.length) throw new Error('No hay ventas con cierre ' + cierre + ' en BASE MAESTRA.');
+  if (!filas.length && !difs.some(z => norm_(z.r[4]) === 'PASA' && mesNorm_(mesTxt_(z.r[5])) === cierre)) throw new Error('No hay ventas con cierre ' + cierre + ' en BASE MAESTRA.');
   const depas = filas.filter(r => /DEPART/i.test(String(r[5]))), otros = filas.filter(r => !/DEPART/i.test(String(r[5])));
 
   // por vendedor: tramo según la cantidad de departamentos del mes
@@ -97,10 +142,22 @@ function comCalcular_(cierre, h) {
       else { monto = Number(f[2]) || 0; pend = Number(f[3]) || 0; }
       // estacionamiento / depósito del mismo cliente y proyecto del vendedor: se muestra en la columna Est / Dep
       const est = otros.filter(o => norm_(o[22]) === k && norm_(o[7]) === norm_(r[7]) && norm_(o[4]) === norm_(r[4])).map(o => txt_(o[6])).join(' / ');
-      det.push([cierre, p.jefe, p.nombre, txt_(r[6]), est, txt_(r[4]), txt_(r[7]), r[16] instanceof Date ? r[16] : '', '', txt_(r[19]), monto, pend, concepto, String(r[0]), 'AUTO']);
+      // subsanación fuera de fecha (o sin subsanar): por defecto pasa al siguiente mes; la decisión manual manda
+      const id = String(r[0]).trim(), s = SUB(id), dec = decide[id] || (s.pasa ? 'PASA' : 'PAGA');
+      info[id] = { subs: s.txt, tipo: s.tipo, decision: dec, defecto: s.pasa ? 'PASA' : 'PAGA', monto: monto, pend: pend, pasaA: sig };
+      if (dec === 'PASA' && (monto || pend)) concepto = 'PASA A ' + sig + ' (S/ ' + (monto + pend).toFixed(2) + ')';
+      det.push([cierre, p.jefe, p.nombre, txt_(r[6]), est, txt_(r[4]), txt_(r[7]), r[16] instanceof Date ? r[16] : '', '', txt_(r[19]), dec === 'PASA' ? 0 : monto, dec === 'PASA' ? 0 : pend, concepto, id, 'AUTO', s.txt]);
     });
     const m = manual['VENDEDOR|' + k] || ['', '', ''];   // comisión, pendiente y T. Pagar se ponen como fórmulas al escribir
     res.push([cierre, 'VENDEDOR', p.nombre, p.jefe, n, comTramoTxt_(n), null, m[0], m[1], m[2], null, null, 'NO', ahora]);
+  });
+  // ventas que vienen del mes anterior (pasaron por subsanación fuera de fecha): se pagan aquí con su monto original
+  const llegan = difs.filter(z => norm_(z.r[4]) === 'PASA' && mesNorm_(mesTxt_(z.r[5])) === cierre && (Number(z.r[6]) || Number(z.r[7])));
+  llegan.forEach(z => {
+    const r = z.r, ven = String(r[2]).trim(), jefe = String(r[3]).trim(), k = norm_(ven), id = String(r[1]).trim();
+    det.push([cierre, jefe, ven, txt_(r[8]), '', txt_(r[9]), txt_(r[10]), r[11] instanceof Date ? r[11] : txt_(r[11]), '', txt_(r[12]), Number(r[6]) || 0, Number(r[7]) || 0, 'DIFERIDO DE ' + mesNorm_(mesTxt_(r[0])), id, 'AUTO', txt_(r[13])]);
+    info[id] = info[id] || { subs: txt_(r[13]), tipo: 'DIFERIDO', decision: 'PAGA', defecto: 'PAGA', monto: Number(r[6]) || 0, pend: Number(r[7]) || 0, diferido: mesNorm_(mesTxt_(r[0])) };
+    if (!porV[k] && !res.some(x => x[1] === 'VENDEDOR' && norm_(x[2]) === k)) { const m = manual['VENDEDOR|' + k] || ['', '', '']; res.push([cierre, 'VENDEDOR', ven, jefe, 0, '— (solo diferidos)', null, m[0], m[1], m[2], null, null, 'NO', ahora]); }
   });
   // jefes de ventas: tramo según TODAS las unidades (departamentos) del equipo en el mes; minuta = unidades × 70% del tramo
   if (esc.jefe) {
@@ -117,7 +174,17 @@ function comCalcular_(cierre, h) {
     const nombre = g ? String(g[0]).trim() : 'GERENTE COMERCIAL', m = manual['GERENTE|' + norm_(nombre)] || ['', '', ''], porU = Number((esc.gerente.f[0] || [])[1]) || 0;
     res.push([cierre, 'GERENTE', nombre, '', depas.length, 'Por unidad', depas.length * porU, m[0], m[1], m[2], null, 0, 'NO', ahora]);
   }
-  return { det: det, res: res, depas: depas, porV: porV, sinMod: sinMod, previos: previos };
+  return { det: det, res: res, depas: depas, porV: porV, sinMod: sinMod, previos: previos, info: info, sig: sig };
+}
+/** Guarda en COMISIONES_DIFERIDOS las ventas que pasan al siguiente mes, con su monto (para pagarlas allí). */
+function comGuardarDiferidos_(h, cierre, c) {
+  const difs = comDifFilas_(h), ya = {}; difs.forEach(z => { if (mesNorm_(mesTxt_(z.r[0])) === cierre) ya[String(z.r[1]).trim()] = z.fila; });
+  c.det.forEach(d => {
+    const id = String(d[13]).trim(), inf = c.info[id]; if (!inf || inf.tipo === 'DIFERIDO' || inf.decision !== 'PASA') return;
+    const datos = [cierre, id, d[2], d[1], 'PASA', c.sig, inf.monto, inf.pend, d[3], d[5], d[6], d[7], d[9], inf.subs];
+    if (ya[id]) { h.f.getRange(ya[id], 6).setNumberFormat('@'); h.f.getRange(ya[id], 1, 1, datos.length).setValues([fila_(datos)]); }
+    else { const i = h.f.getLastRow() + 1; h.f.getRange(i, 1).setNumberFormat('@'); h.f.getRange(i, 6).setNumberFormat('@'); h.f.getRange(i, 1, 1, COM_DIF_HDR.length).setValues([fila_(datos.concat(['(automático: fuera de fecha)', new Date()]))]); }
+  });
 }
 const comCierreOk_ = c => { c = mesNorm_(c); if (!/^[A-Z]+ \d{4}$/.test(c)) throw new Error('Elige un cierre válido (por ejemplo OCTUBRE 2026).'); return c; };
 
@@ -125,10 +192,12 @@ const comCierreOk_ = c => { c = mesNorm_(c); if (!/^[A-Z]+ \d{4}$/.test(c)) thro
 function comPrevisualizar(token, cierre) {
   const u = sesion_(token); puede_(u, 'accesos');
   cierre = comCierreOk_(cierre);
-  const h = comHojas_(), c = comCalcular_(cierre, h), n = x => Number(x) || 0;
+  const h = comHojas_(), c = comCalcular_(cierre, h, token), n = x => Number(x) || 0;
   const lineas = c.det.concat(comFilas_(h.d).filter(r => mesNorm_(mesTxt_(r[0])) === cierre && norm_(r[14]) !== 'AUTO'));
-  const linea = d => ({ dpto: txt_(d[3]), est: txt_(d[4]), proyecto: txt_(d[5]), cliente: txt_(d[6]), minuta: txt_(d[7]), escritura: txt_(d[8]), fin: txt_(d[9]),
-    monto: n(d[10]), pendiente: n(d[11]), concepto: txt_(d[12]), id: txt_(d[13]), manual: norm_(d[14]) !== 'AUTO' });
+  const linea = d => { const inf = norm_(d[14]) === 'AUTO' ? c.info[txt_(d[13])] || {} : {};
+    return { dpto: txt_(d[3]), est: txt_(d[4]), proyecto: txt_(d[5]), cliente: txt_(d[6]), minuta: d[7] instanceof Date ? Utilities.formatDate(d[7], 'America/Lima', 'dd/MM/yy') : txt_(d[7]), escritura: txt_(d[8]), fin: txt_(d[9]),
+      monto: n(d[10]), pendiente: n(d[11]), concepto: txt_(d[12]), id: txt_(d[13]), manual: norm_(d[14]) !== 'AUTO',
+      subs: txt_(d[15]) || inf.subs || '', tipo: inf.tipo || '', decision: inf.decision || '', defecto: inf.defecto || '', montoOrig: inf.monto || 0, pendOrig: inf.pend || 0, diferido: inf.diferido || '' }; };
   const personas = c.res.map(x => {
     const v = norm_(x[1]) === 'VENDEDOR', l = v ? lineas.filter(d => norm_(d[2]) === norm_(x[2])).map(linea) : [];
     const com = v ? l.reduce((a, d) => a + d.monto, 0) : n(x[6]), pen = v ? l.reduce((a, d) => a + d.pendiente, 0) : n(x[11]);
@@ -136,7 +205,11 @@ function comPrevisualizar(token, cierre) {
       pendiente: pen, total: com + n(x[7]) - n(x[8]) - n(x[9]), lineas: l };
   });
   return { cierre: cierre, departamentos: c.depas.length, vendedores: Object.keys(c.porV).length, revisar: c.sinMod, yaGenerado: c.previos.length > 0,
-    publicado: c.previos.some(r => norm_(r[12]) === 'SI'), total: personas.reduce((a, p) => a + p.total, 0), personas: personas, avisadas: comAvisadas_(cierre, c.porV) };
+    publicado: c.previos.some(r => norm_(r[12]) === 'SI'), total: personas.reduce((a, p) => a + p.total, 0), personas: personas, avisadas: comAvisadas_(cierre, c.porV),
+    siguiente: c.sig, plazo: (typeof plazo_ === 'function' && plazo_(cierre, 'X')) ? fmtPlazo_(plazo_(cierre, 'X')) : '',
+    // filtro: cuántas ventas del cierre se subsanaron dentro y fuera de fecha (una por expediente)
+    plazos: Object.keys(c.info).filter(id => c.info[id].tipo !== 'DIFERIDO').map(id => { const d = c.det.find(z => String(z[13]).trim() === id) || [];
+      return { id: id, tipo: c.info[id].tipo, subs: c.info[id].subs, vendedor: txt_(d[2]), jefe: txt_(d[1]), cliente: txt_(d[6]), proyecto: txt_(d[5]), dpto: txt_(d[3]), decision: c.info[id].decision }; }) };
 }
 /** PROYECCIÓN: departamentos avisados en el portal (📣 Avisar venta) en el mes del cierre que aún NO están en BASE MAESTRA.
  *  No se pagan: solo muestran a qué tramo podría llegar cada vendedor si se registran. */
@@ -158,7 +231,7 @@ function comAvisadas_(cierre, porV) {
 function comGenerar(token, cierre, forzar) {
   const u = sesion_(token); puede_(u, 'accesos');
   cierre = comCierreOk_(cierre);
-  const h = comHojas_(), c = comCalcular_(cierre, h), det = c.det, res = c.res, depas = c.depas, porV = c.porV, sinMod = c.sinMod;
+  const h = comHojas_(), c = comCalcular_(cierre, h, token), det = c.det, res = c.res, depas = c.depas, porV = c.porV, sinMod = c.sinMod;
   if (c.previos.some(r => norm_(r[12]) === 'SI') && !forzar) throw new Error('El cierre ' + cierre + ' ya está PUBLICADO. Despublícalo primero si quieres regenerarlo.');
 
   // escribe: borra lo AUTO del cierre (lo manual del detalle se queda) y el resumen del cierre
@@ -167,6 +240,7 @@ function comGenerar(token, cierre, forzar) {
     comBorrar_(h.d, r => mesNorm_(mesTxt_(r[0])) === cierre && norm_(r[14]) === 'AUTO');
     comBorrar_(h.r, r => mesNorm_(mesTxt_(r[0])) === cierre);
     if (det.length) { const i = h.d.getLastRow() + 1; h.d.getRange(i, 1, det.length, 1).setNumberFormat('@'); h.d.getRange(i, 1, det.length, COM_DET_HDR.length).setValues(det.map(fila_)); }
+    comGuardarDiferidos_(h, cierre, c);   // lo que pasa al siguiente mes queda guardado con su monto
     // comisión y pendiente del vendedor = suma de sus líneas del cierre (AUTO + las que agregaste a mano). Se calcula aquí
     // (las fórmulas SUMIFS daban #ERROR! con la configuración en español del Sheet).
     const suma = {}; comFilas_(h.d).forEach(r => { if (mesNorm_(mesTxt_(r[0])) !== cierre) return; const k = norm_(r[2]), s = suma[k] = suma[k] || [0, 0]; s[0] += Number(r[10]) || 0; s[1] += Number(r[11]) || 0; });
@@ -196,51 +270,54 @@ function comPublicar(token, cierre, publicar) {
 /** FORMATO "CIERRE DE MES" (igual al Excel de Contratos y Cobranzas): una pestaña GRUPO <JEFE>, un bloque por vendedor.
  *  Se arma en un Google Sheet de Drive (carpeta "COMISIONES - MG", uno por cierre, se reemplaza al volver a exportar)
  *  y se descarga como Excel (editable) o PDF (para imprimir). Las sumas quedan como fórmulas simples (sin comas). */
-const COM_TELEFONO = '472-7813';
-const COM_COL = { naranja: '#F8CBAD', morado: '#78206E', amarillo: '#FFC000', verde: '#92D050', aviso: '#FFFF00', rojo: '#FF0000' };
+const COM_COL = { naranja: '#F8CBAD', morado: '#78206E', amarillo: '#FFC000', verde: '#92D050', aviso: '#FFFF00', rojo: '#FF0000', okBg: '#C6EFCE', okTx: '#006100', malBg: '#FFC7CE', malTx: '#9C0006' };
 const COM_SOL = '"S/." #,##0.00;[Red]"S/." -#,##0.00';
 
 function comBloqueVendedor_(sh, f, p, lineas, cierre) {
   const C = COM_COL, primero = comPrimerDia_(cierre);
-  // 1) nombre · mes · teléfono
-  sh.getRange(f, 2, 1, 10).setBackground(C.naranja);
+  // 1) nombre · mes  (columnas B..L: se agregó SUBSANACIÓN después de TIPO FINANC.)
+  sh.getRange(f, 2, 1, 11).setBackground(C.naranja);
   sh.getRange(f, 3, 1, 3).merge().setValue(String(p[2]).toUpperCase()).setBackground(C.morado).setFontColor('#FFFFFF').setFontWeight('bold').setHorizontalAlignment('center');
   sh.getRange(f, 6).setValue(primero).setNumberFormat('mmm-yy').setBackground(C.morado).setFontColor('#FFFFFF').setFontWeight('bold').setHorizontalAlignment('center');
-  sh.getRange(f, 9).setValue(COM_TELEFONO).setFontWeight('bold').setHorizontalAlignment('center');
   f++;
   // 2) cabecera en dos filas
-  sh.getRange(f, 2, 2, 10).setValues([
-    ['DPTO', 'EST/DEP', 'PROYECTO', 'CLIENTE', 'FECHA DE', 'FECHA DE', 'TIPO', 'MONTO', 'PENDIENTE', 'CONCEPTO'],
-    ['', '', '', '', 'MINUTA', 'ESCRITURA', 'FINANC.', 'COMISION S/.', '', '']])
+  sh.getRange(f, 2, 2, 11).setValues([
+    ['DPTO', 'EST/DEP', 'PROYECTO', 'CLIENTE', 'FECHA DE', 'FECHA DE', 'TIPO', 'SUBSANACIÓN', 'MONTO', 'PENDIENTE', 'CONCEPTO'],
+    ['', '', '', '', 'MINUTA', 'ESCRITURA', 'FINANC.', '(PLAZO)', 'COMISION S/.', '', '']])
     .setBackground(C.naranja).setFontWeight('bold').setFontSize(10).setHorizontalAlignment('center').setVerticalAlignment('middle')
     .setBorder(true, true, true, true, true, false);
-  [2, 3, 4, 5, 10, 11].forEach(c => sh.getRange(f, c, 2, 1).merge());
+  [2, 3, 4, 5, 11, 12].forEach(c => sh.getRange(f, c, 2, 1).merge());
   f += 2;
   // 3) líneas
   const ini = f;
   if (lineas.length) {
-    sh.getRange(f, 2, lineas.length, 10).setValues(lineas.map(d => [txt_(d[3]), txt_(d[4]), txt_(d[5]), txt_(d[6]), d[7] instanceof Date ? d[7] : txt_(d[7]),
-      d[8] instanceof Date ? d[8] : txt_(d[8]), txt_(d[9]), Number(d[10]) || 0, Number(d[11]) || 0, txt_(d[12])]))
+    sh.getRange(f, 2, lineas.length, 11).setValues(lineas.map(d => [txt_(d[3]), txt_(d[4]), txt_(d[5]), txt_(d[6]), d[7] instanceof Date ? d[7] : txt_(d[7]),
+      d[8] instanceof Date ? d[8] : txt_(d[8]), txt_(d[9]), txt_(d[15]), Number(d[10]) || 0, Number(d[11]) || 0, txt_(d[12])]))
       .setFontSize(9).setBorder(true, true, true, true, true, true).setVerticalAlignment('middle');
     sh.getRange(f, 2, lineas.length, 3).setHorizontalAlignment('center');
     sh.getRange(f, 6, lineas.length, 2).setNumberFormat('dd/mm/yyyy').setHorizontalAlignment('center');
-    sh.getRange(f, 8, lineas.length, 1).setHorizontalAlignment('center');
-    sh.getRange(f, 9, lineas.length, 2).setNumberFormat(COM_SOL);
+    sh.getRange(f, 8, lineas.length, 2).setHorizontalAlignment('center');
+    sh.getRange(f, 10, lineas.length, 2).setNumberFormat(COM_SOL);
+    lineas.forEach((d, i) => {   // verde: sin observaciones / en fecha · rojo: fuera de fecha / sin subsanar (y concepto en rojo si pasa al siguiente mes)
+      const t = norm_(d[15]); if (!t) return; const mal = /FUERA|SIN SUBSANAR/.test(t);
+      sh.getRange(f + i, 9).setBackground(mal ? C.malBg : C.okBg).setFontColor(mal ? C.malTx : C.okTx).setFontWeight(mal ? 'bold' : 'normal');
+      if (/^PASA A/.test(norm_(d[12]))) sh.getRange(f + i, 12).setFontColor(C.rojo).setFontWeight('bold');
+    });
     f += lineas.length;
   }
   // 4) total de las líneas
   const tot = f;
   sh.getRange(f, 2).setValue('TOTAL').setFontWeight('bold');
-  sh.getRange(f, 9).setFormula(lineas.length ? '=SUM(I' + ini + ':I' + (f - 1) + ')' : '=0').setBackground(C.amarillo);
-  sh.getRange(f, 10).setFormula(lineas.length ? '=SUM(J' + ini + ':J' + (f - 1) + ')' : '=0');
-  sh.getRange(f, 9, 1, 2).setNumberFormat(COM_SOL).setFontWeight('bold').setBorder(true, true, true, true, true, false);
+  sh.getRange(f, 10).setFormula(lineas.length ? '=SUM(J' + ini + ':J' + (f - 1) + ')' : '=0').setBackground(C.amarillo);
+  sh.getRange(f, 11).setFormula(lineas.length ? '=SUM(K' + ini + ':K' + (f - 1) + ')' : '=0');
+  sh.getRange(f, 10, 1, 2).setNumberFormat(COM_SOL).setFontWeight('bold').setBorder(true, true, true, true, true, false);
   f += 2;
   // 5) total por pagar
   sh.getRange(f, 2).setValue('TOTAL POR PAGAR').setFontWeight('bold'); f++;
   sh.getRange(f, 5, 1, 5).setValues([['COMISION', 'BONO(*)', 'ADELANTO', 'DSCTO', 'T.PAGAR']]).setFontWeight('bold').setHorizontalAlignment('center');
   sh.getRange(f, 6).setFontColor(C.rojo); sh.getRange(f, 9).setBackground(C.verde); f++;
   sh.getRange(f, 4).setValue(String(p[2]).toUpperCase()).setFontWeight('bold');
-  sh.getRange(f, 5).setFormula('=I' + tot);
+  sh.getRange(f, 5).setFormula('=J' + tot);
   sh.getRange(f, 6, 1, 3).setValues([[Number(p[7]) || 0, Number(p[8]) || 0, Number(p[9]) || 0]]);
   sh.getRange(f, 9).setFormula('=E' + f + '+F' + f + '-G' + f + '-H' + f).setBackground(C.verde).setFontWeight('bold');
   sh.getRange(f, 5, 1, 5).setNumberFormat(COM_SOL);
@@ -263,8 +340,8 @@ function comBloqueJefe_(sh, f, jr, cierre) {
 }
 const comPrimerDia_ = c => { const p = c.split(' '); return new Date(Number(p[1]), MESES_.indexOf(p[0]), 1); };
 function comAnchos_(sh) {
-  [[1, 20], [2, 70], [3, 60], [4, 110], [5, 290], [6, 85], [7, 85], [8, 100], [9, 110], [10, 100], [11, 210]].forEach(x => sh.setColumnWidth(x[0], x[1]));
-  sh.setHiddenGridlines(true); sh.getRange('A:K').setFontFamily('Arial');
+  [[1, 20], [2, 70], [3, 60], [4, 110], [5, 290], [6, 85], [7, 85], [8, 100], [9, 110], [10, 110], [11, 100], [12, 230]].forEach(x => sh.setColumnWidth(x[0], x[1]));
+  sh.setHiddenGridlines(true); sh.getRange('A:L').setFontFamily('Arial');
 }
 
 /** Arma (o reemplaza) el archivo del cierre en Drive. Devuelve el Spreadsheet. */
@@ -293,7 +370,7 @@ function comArmar_(cierre) {
   const g = res.find(r => norm_(r[1]) === 'GERENTE');
   if (g) {
     const sh = libro.insertSheet('GERENTE COMERCIAL', libro.getSheets().length); comAnchos_(sh);
-    sh.getRange(2, 2, 1, 10).setBackground(COM_COL.naranja);
+    sh.getRange(2, 2, 1, 11).setBackground(COM_COL.naranja);
     sh.getRange(2, 3, 1, 3).merge().setValue('GERENTE COMERCIAL · ' + String(g[2]).toUpperCase()).setBackground(COM_COL.morado).setFontColor('#FFFFFF').setFontWeight('bold').setHorizontalAlignment('center');
     sh.getRange(2, 6).setValue(comPrimerDia_(cierre)).setNumberFormat('mmm-yy').setBackground(COM_COL.morado).setFontColor('#FFFFFF').setFontWeight('bold').setHorizontalAlignment('center');
     sh.getRange(3, 3, 1, 6).setValues([['UNIDADES', 'COMISION', 'BONO(*)', 'ADELANTO', 'DSCTO', 'T.PAGAR']]).setBackground(COM_COL.naranja).setFontWeight('bold').setHorizontalAlignment('center').setBorder(true, true, true, true, true, true);

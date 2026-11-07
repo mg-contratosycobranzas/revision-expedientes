@@ -63,10 +63,12 @@ function puntosEstado(token, id) {
 function puntosSubsanar(token, id, lista, texto, adjunto) {
   const u = sesion_(token); puede_(u, 'subsanar'); punAcceso_(token, id);
   const ps = punLista_(lista); if (!ps.length) throw new Error('Marca al menos un punto que ya subsanaste.');
+  const hb = typeof habAntesDeSubsanar_ === 'function' ? habAntesDeSubsanar_(token, id) : null;   // 🔒 Bloqueo.gs: espera de revisión o plazo vencido
   texto = String(texto || '').trim();
   const item = ps.length === 1 ? ps[0].area + ' · ' + ps[0].punto : 'Varios puntos (' + ps.length + ')';
-  const det = 'Subsané: ' + ps.map(p => p.punto).join(' / ') + (texto ? '\n✍️ ' + texto : '');
+  const det = 'Subsané: ' + ps.map(p => p.punto).join(' / ') + (texto ? '\n✍️ ' + texto : '') + (hb && !habEsCC_(u) ? habNota_(hb.hab) : '');
   const r = subsanar(token, id, item, det, adjunto);   // historial en SUBSANACIONES, estado 🟠, plazo y correo a Contratos (Code.gs)
+  if (hb && !habEsCC_(u)) habUsar_(String(id).trim(), hb.hab);
   const ahora = new Date();
   const lock = LockService.getScriptLock(); lock.waitLock(20000);
   try { punGuardar_(String(id).trim(), ps.map(p => ({ area: p.area, punto: p.punto, valores: { 4: 'POR VERIFICAR', 5: u.nombre, 6: ahora, 7: texto, 8: '', 9: '', 10: '' } }))); }

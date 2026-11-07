@@ -1,19 +1,21 @@
 {
-  "version": "2026.11.06-2",
-  "notas": "Avisar venta (básico + situación de la venta); la asistente confirma recepción y entrega a Contratos sin checklist ni cargo; proyección de comisiones",
+  "version": "2026.11.06-3",
+  "notas": "Bloqueo de Comercial hasta la respuesta de Contratos con pedido de habilitación; subsanación en fecha / fuera de fecha en comisiones (pasa al siguiente mes); cuadro estilo B",
   "archivos": [
     "Ruta",
     "Comisiones",
     "Ayuda",
     "Seguimiento",
-    "Puntos"
+    "Puntos",
+    "Bloqueo"
   ],
   "sha256": {
     "Ruta": "8b47131502caac7244cfaef3d9d1fd34416b344fd14fcf66baf5d257817eebfc",
-    "Comisiones": "53bb7732d7ff0156be707301b82819c7156368c932ebe4c7ac366b13b2acb008",
+    "Comisiones": "ea912173e84537bb9f340ac8fcf0fdba6945e06021a0b1ba44330b749d644d8a",
     "Ayuda": "0f3a579cd0f522a678c9b16e0e61ea44b2683da551b5e964e7b2d6000c73c467",
     "Seguimiento": "fa95c9c531a5ad4bce253a381eb167694009a42a1e90cb423b028e085cd8f199",
-    "Puntos": "2d1cc33a18bf661365c235cb3d572e0c5239a75bfa8d489d3bc950863639df38"
+    "Puntos": "75934dd8f5acb9423172e639d2ad0270ae92b032b99114c0e734f2b1d87c9691",
+    "Bloqueo": "d2525650d5fa8ba65dcd55ee67ff2bd0e9472331d6487f31b9f4b0032a5dd53f"
   },
-  "firma": "2b41e6dbcbcef0117d6636c16793be1963791b5ff404a4da8c4dc224543c0cbf"
+  "firma": "938a8866c98e3fa0f503d9740d3011f86f3caa8814c1133cf524877b743a773a"
 }
