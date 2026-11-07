@@ -492,9 +492,20 @@ function comExportar(token, cierre, formato) {
   return out;
 }
 
+/* ---------- interruptor: ¿Comercial puede ver sus comisiones? (apagado por defecto; lo decide la administración) ---------- */
+const comVerComercial_ = () => PropertiesService.getScriptProperties().getProperty('COM_VER_COMERCIAL') === 'SI';
+/** Sin "modo": consulta (para mostrar u ocultar el botón). Con "modo" SI / NO: lo cambia (solo administración). */
+function comVisible(token, modo) {
+  const u = sesion_(token);
+  if (modo === 'SI' || modo === 'NO') { puede_(u, 'accesos'); PropertiesService.getScriptProperties().setProperty('COM_VER_COMERCIAL', modo); log_(u.nombre, 'COMISIONES_VISIBLES', modo); }
+  return { ver: comVerComercial_() || u.permisos.indexOf('accesos') >= 0, activo: comVerComercial_() };
+}
+try { if (API_PUBLICA.indexOf('comVisible') < 0) API_PUBLICA.push('comVisible'); if (SOLO_LECTURA.indexOf('comVisible') < 0) SOLO_LECTURA.push('comVisible'); } catch (e) {}
+
 /* ---------- lo que ve cada persona (solo lo publicado y solo lo suyo) ---------- */
 function misComisiones(token) {
   const u = sesion_(token), yo = [norm_(u.ref), norm_(u.nombre)].filter(Boolean);
+  if (!comVerComercial_() && u.permisos.indexOf('accesos') < 0) return [];   // interruptor apagado: Comercial no ve montos
   const ss = ss_(), r = ss.getSheetByName(HOJA_COM_RES), d = ss.getSheetByName(HOJA_COM_DET); if (!r) return [];
   const det = d ? comFilas_(d) : [], out = [];
   r.getDataRange().getValues().slice(1).forEach(x => {
