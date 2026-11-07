@@ -502,6 +502,26 @@ function comVisible(token, modo) {
 }
 try { if (API_PUBLICA.indexOf('comVisible') < 0) API_PUBLICA.push('comVisible'); if (SOLO_LECTURA.indexOf('comVisible') < 0) SOLO_LECTURA.push('comVisible'); } catch (e) {}
 
+/* ---------- 📈 MI AVANCE (sin montos): departamentos del cierre, tramo y cuántos faltan para subir ----------
+ * Vendedor: sus ventas · Jefe: las de su equipo (escala de jefe). Sale del cierre más reciente de BASE MAESTRA. */
+function miAvance(token) {
+  const u = sesion_(token), esc = comEscala_(), cierres = comCierres_(), cierre = cierres[0] || '';
+  if (!cierre) return null;
+  const esJefe = u.rol === 'JEFE', yo = norm_(u.ref || u.nombre);
+  const v = ss_().getSheetByName(HOJA_BM).getRange(PRIMERA_FILA, 1, ULTIMA_FILA - PRIMERA_FILA + 1, 24).getValues()
+    .filter(r => r[0] && mesNorm_(mesTxt_(r[3])) === cierre && /DEPART/i.test(String(r[5])) && (esJefe ? norm_(r[23]) === yo : norm_(r[22]) === yo));
+  const tabla = esJefe ? esc.jefe : esc.ahorro, rangos = ((tabla && tabla.f) || []).map(f => ({ t: String(f[0]), r: comRango_(f[0]) })).sort((a, b) => a.r[0] - b.r[0]);
+  const n = v.length, act = rangos.find(x => n >= x.r[0] && n <= x.r[1]) || null, sig = rangos.find(x => x.r[0] > n) || null;
+  const est = {}; try { misExpedientes(token).forEach(x => est[x.id] = x); } catch (e) {}
+  const c = { aprobado: 0, observado: 0, subsanado: 0, pendiente: 0 };
+  v.forEach(r => { const x = est[String(r[0]).trim()] || {}; const ok = x.estado === 'COMPLETO' || (norm_(x.sbs) === 'APROBADO' && norm_(x.ctr) === 'APROBADO');
+    c[ok ? 'aprobado' : x.estado === 'OBSERVADO' ? 'observado' : x.estado === 'SUBSANADO' ? 'subsanado' : 'pendiente']++; });
+  let avisadas = 0; try { avisadas = (comAvisadas_(cierre, {}) || []).filter(a => esJefe ? true : norm_(a.vendedor) === yo).reduce((s, a) => s + a.avisadas, 0); } catch (e) {}
+  return { cierre: cierre, jefe: esJefe, departamentos: n, tramo: act ? act.t : (n ? '' : 'Aún sin ventas'), siguiente: sig ? sig.t : '', faltan: sig ? sig.r[0] - n : 0,
+    maxBarra: sig ? sig.r[0] : Math.max(n, 1), conteo: c, avisadas: esJefe ? 0 : avisadas };
+}
+try { if (API_PUBLICA.indexOf('miAvance') < 0) API_PUBLICA.push('miAvance'); if (SOLO_LECTURA.indexOf('miAvance') < 0) SOLO_LECTURA.push('miAvance'); } catch (e) {}
+
 /* ---------- lo que ve cada persona (solo lo publicado y solo lo suyo) ---------- */
 function misComisiones(token) {
   const u = sesion_(token), yo = [norm_(u.ref), norm_(u.nombre)].filter(Boolean);

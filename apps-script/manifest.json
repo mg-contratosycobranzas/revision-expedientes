@@ -1,6 +1,6 @@
 {
-  "version": "2026.11.06-6",
-  "notas": "Interruptor: Comercial ve o no sus comisiones (apagado por defecto)",
+  "version": "2026.11.06-7",
+  "notas": "Mi avance (sin montos): departamentos del mes, tramo y cuántos faltan para subir",
   "archivos": [
     "Ruta",
     "Comisiones",
@@ -11,11 +11,11 @@
   ],
   "sha256": {
     "Ruta": "26d9ac0c5bc58dfbe6e3bd9e5b18edcb01767b90e8d8d6c17c426340d401a441",
-    "Comisiones": "4789f880d84d22760b546d63939b8494a6faf1c1834cbdc0704cd1f7c623013c",
+    "Comisiones": "ea500ccd4ad508af8736de47a1ce9bee2f8d0205b0f0d3e4c30e46ff3843df6e",
     "Ayuda": "0f3a579cd0f522a678c9b16e0e61ea44b2683da551b5e964e7b2d6000c73c467",
     "Seguimiento": "fa95c9c531a5ad4bce253a381eb167694009a42a1e90cb423b028e085cd8f199",
     "Puntos": "75934dd8f5acb9423172e639d2ad0270ae92b032b99114c0e734f2b1d87c9691",
     "Bloqueo": "d2525650d5fa8ba65dcd55ee67ff2bd0e9472331d6487f31b9f4b0032a5dd53f"
   },
-  "firma": "cdb94eb9153bad885357ea035ef7879c5ae072498179b909f90e8b073874f68b"
+  "firma": "9af0baaf3d3401b4d40a8d1b3b11f51943dc0d33c7815e73861e331b1e9cb033"
 }
