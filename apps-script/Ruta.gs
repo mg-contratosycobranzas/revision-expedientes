@@ -13,6 +13,8 @@ const HOJA_RUTA = 'RUTA_FILE', HOJA_RUTA_LOG = 'RUTA_LOG', RUTA_ROJO_H = 24;
 const RUTA_FN = ['rutaOpciones', 'rutaPresentar', 'rutaMias', 'rutaBandeja', 'rutaRecibir', 'rutaConfirmar', 'rutaEntregar', 'rutaRecibirLote', 'rutaDevolver', 'rutaValidar', 'rutaPanel', 'rutaDeExp', 'anularCargo', 'agregarOpcion'];
 try {
   RUTA_FN.forEach(f => { if (API_PUBLICA.indexOf(f) < 0) API_PUBLICA.push(f); });
+  // consultas de solo lectura: se pueden abrir también en "Ver como" (guardar sigue bloqueado)
+  ['rutaOpciones', 'rutaMias', 'rutaBandeja', 'rutaPanel', 'rutaDeExp'].forEach(f => { if (SOLO_LECTURA.indexOf(f) < 0) SOLO_LECTURA.push(f); });
   ['presentar', 'bajar'].forEach(p => { if (PERMISOS.indexOf(p) < 0) PERMISOS.push(p); });
   ['VENDEDOR', 'JEFE', 'APOYO'].forEach(r => { if (PERMISOS_BASE[r] && PERMISOS_BASE[r].indexOf('presentar') < 0) PERMISOS_BASE[r].push('presentar'); });
 } catch (e) {}

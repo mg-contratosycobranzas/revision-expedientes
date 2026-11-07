@@ -1,6 +1,6 @@
 {
-  "version": "2026.11.06-4",
-  "notas": "Comisiones: se paga lo aprobado (regla) con decisión manual, monto manual, conceptos, ventas de meses anteriores y marca de pagado",
+  "version": "2026.11.06-5",
+  "notas": "Ver como: se pueden abrir Avisar venta y Ventas avisadas (solo lectura)",
   "archivos": [
     "Ruta",
     "Comisiones",
@@ -10,12 +10,12 @@
     "Bloqueo"
   ],
   "sha256": {
-    "Ruta": "8b47131502caac7244cfaef3d9d1fd34416b344fd14fcf66baf5d257817eebfc",
+    "Ruta": "26d9ac0c5bc58dfbe6e3bd9e5b18edcb01767b90e8d8d6c17c426340d401a441",
     "Comisiones": "577d31bdd07e96f158ca3ea5535d6441bb834846ce0b0d111f85ab415c566ab1",
     "Ayuda": "0f3a579cd0f522a678c9b16e0e61ea44b2683da551b5e964e7b2d6000c73c467",
     "Seguimiento": "fa95c9c531a5ad4bce253a381eb167694009a42a1e90cb423b028e085cd8f199",
     "Puntos": "75934dd8f5acb9423172e639d2ad0270ae92b032b99114c0e734f2b1d87c9691",
     "Bloqueo": "d2525650d5fa8ba65dcd55ee67ff2bd0e9472331d6487f31b9f4b0032a5dd53f"
   },
-  "firma": "bf0b6f3dfa7b317ee39c2752a9cffe9e1dc425d04ef129d0cc80cdcc8fcf5e27"
+  "firma": "62868331c2e9e83a1bdb14f1cf5e2deb50168a70ddbef35f180df89e7937a8bc"
 }
