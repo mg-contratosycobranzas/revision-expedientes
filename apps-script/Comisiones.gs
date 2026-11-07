@@ -136,7 +136,23 @@ function comPrevisualizar(token, cierre) {
       pendiente: pen, total: com + n(x[7]) - n(x[8]) - n(x[9]), lineas: l };
   });
   return { cierre: cierre, departamentos: c.depas.length, vendedores: Object.keys(c.porV).length, revisar: c.sinMod, yaGenerado: c.previos.length > 0,
-    publicado: c.previos.some(r => norm_(r[12]) === 'SI'), total: personas.reduce((a, p) => a + p.total, 0), personas: personas };
+    publicado: c.previos.some(r => norm_(r[12]) === 'SI'), total: personas.reduce((a, p) => a + p.total, 0), personas: personas, avisadas: comAvisadas_(cierre, c.porV) };
+}
+/** PROYECCIÓN: departamentos avisados en el portal (📣 Avisar venta) en el mes del cierre que aún NO están en BASE MAESTRA.
+ *  No se pagan: solo muestran a qué tramo podría llegar cada vendedor si se registran. */
+function comAvisadas_(cierre, porV) {
+  try {
+    if (typeof rutaFilas_ !== 'function' || typeof RC === 'undefined') return [];
+    const ini = comPrimerDia_(cierre), fin = new Date(ini.getFullYear(), ini.getMonth() + 1, 1), por = {};
+    rutaFilas_().forEach(x => {
+      const r = x.r, est = String(r[RC.estado - 1]), f = r[RC.fecha - 1];
+      if (['VALIDADO', 'ANULADO'].indexOf(est) >= 0 || !(f instanceof Date) || f < ini || f >= fin || !/DEPART/i.test(String(r[RC.tipo - 1]))) return;
+      const k = norm_(r[RC.vendedor - 1]), p = por[k] = por[k] || { vendedor: String(r[RC.vendedor - 1]).trim(), avisadas: 0, detalle: [] };
+      p.avisadas++; p.detalle.push(txt_(r[RC.proyecto - 1]) + ' ' + txt_(r[RC.unidad - 1]) + (r[RC.situacion - 1] ? ' · ' + txt_(r[RC.situacion - 1]) : ''));
+    });
+    return Object.keys(por).sort().map(k => { const reg = porV[k] ? porV[k].filas.length : 0, p = por[k];
+      return { vendedor: p.vendedor, registradas: reg, avisadas: p.avisadas, posible: reg + p.avisadas, tramoActual: reg ? comTramoTxt_(reg) : '—', tramoPosible: comTramoTxt_(reg + p.avisadas), detalle: p.detalle }; });
+  } catch (e) { return []; }
 }
 
 function comGenerar(token, cierre, forzar) {

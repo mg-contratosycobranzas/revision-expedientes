@@ -10,7 +10,7 @@
  * Se conecta solo con Code.gs: agrega sus funciones a API_PUBLICA y los permisos "presentar" y "bajar".
  */
 const HOJA_RUTA = 'RUTA_FILE', HOJA_RUTA_LOG = 'RUTA_LOG', RUTA_ROJO_H = 24;
-const RUTA_FN = ['rutaOpciones', 'rutaPresentar', 'rutaMias', 'rutaBandeja', 'rutaRecibir', 'rutaEntregar', 'rutaRecibirLote', 'rutaDevolver', 'rutaValidar', 'rutaPanel', 'rutaDeExp', 'anularCargo', 'agregarOpcion'];
+const RUTA_FN = ['rutaOpciones', 'rutaPresentar', 'rutaMias', 'rutaBandeja', 'rutaRecibir', 'rutaConfirmar', 'rutaEntregar', 'rutaRecibirLote', 'rutaDevolver', 'rutaValidar', 'rutaPanel', 'rutaDeExp', 'anularCargo', 'agregarOpcion'];
 try {
   RUTA_FN.forEach(f => { if (API_PUBLICA.indexOf(f) < 0) API_PUBLICA.push(f); });
   ['presentar', 'bajar'].forEach(p => { if (PERMISOS.indexOf(p) < 0) PERMISOS.push(p); });
@@ -19,11 +19,13 @@ try {
 
 // Columnas de RUTA_FILE
 const RC = { pr: 1, estado: 2, fecha: 3, vendedor: 4, presento: 5, proyecto: 6, tipo: 7, unidad: 8, cliente: 9, dni: 10, tipoCliente: 11, fin: 12, nota: 13,
-  recibio: 14, fRecibio: 15, docs: 16, faltantes: 17, devol: 18, lote: 19, fEntrega: 20, recibioCC: 21, fRecibioCC: 22, exp: 23, valido: 24, fValido: 25, fPrimera: 26, folios: 27 };
-const RUTA_NC = 27;
+  recibio: 14, fRecibio: 15, docs: 16, faltantes: 17, devol: 18, lote: 19, fEntrega: 20, recibioCC: 21, fRecibioCC: 22, exp: 23, valido: 24, fValido: 25, fPrimera: 26, folios: 27, situacion: 28 };
+const RUTA_NC = 28;
+// Situación de la venta que indica el vendedor o jefe al avisar (la ven la asistente y Contratos)
+const RUTA_SIT = ['YA FIRMÓ MINUTA', 'FIRMARÁ MINUTA LUEGO DEL PAGO', 'VENTA POR INGRESAR (SEPARACIÓN)'];
 const RUTA_HDR = ['PR', 'Estado', 'Fecha presentación', 'Vendedor', 'Presentó (usuario)', 'Proyecto', 'Tipo', 'Unidad', 'Cliente', 'DNI / CE / RUC', 'Tipo de cliente', 'Financiamiento', 'Nota del vendedor',
   'Recibió (asistente)', 'Fecha recibido', 'Documentos completos', 'Faltantes / motivo', 'N° devoluciones', 'Entrega (lote)', 'Fecha entrega a Contratos', 'Recibió Contratos', 'Fecha recepción Contratos',
-  'EXP', 'Validó', 'Fecha validación', 'Primera presentación', 'Folios'];
+  'EXP', 'Validó', 'Fecha validación', 'Primera presentación', 'Folios', 'Situación de la venta'];
 // Quién tiene el file después de cada evento (para medir el cuello de botella)
 const RUTA_ETAPA = { PRESENTADO: 'Asistente: recibir', RECIBIDO: 'Asistente: entregar', DEVUELTO: 'Vendedor: corregir', ENTREGADO: 'Contratos: recibir', 'EN CONTRATOS': 'Contratos: validar' };
 
@@ -34,6 +36,8 @@ function hojaRuta_() {
     h.getRange(1, 1, 1, RUTA_NC).setFontWeight('bold').setBackground('#0C1A3D').setFontColor('#FFFFFF');
     h.getRange(2, RC.dni, 998, 1).setNumberFormat('@');
   }
+  if (h.getMaxColumns() < RUTA_NC) h.insertColumnsAfter(h.getMaxColumns(), RUTA_NC - h.getMaxColumns());
+  if (String(h.getRange(1, RC.situacion).getValue()) !== RUTA_HDR[RC.situacion - 1]) h.getRange(1, RC.situacion).setValue(RUTA_HDR[RC.situacion - 1]).setFontWeight('bold').setBackground('#0C1A3D').setFontColor('#FFFFFF');
   if (!ss.getSheetByName(HOJA_RUTA_LOG)) {
     const l = ss.insertSheet(HOJA_RUTA_LOG); l.appendRow(['Fecha', 'PR', 'Evento', 'Usuario', 'Detalle']); l.setFrozenRows(1);
     l.getRange('A1:E1').setFontWeight('bold').setBackground('#0C1A3D').setFontColor('#FFFFFF');
@@ -54,7 +58,7 @@ function rutaObj_(x) {
   return { pr: String(g('pr')), estado: est, fecha: rFecha_(g('fecha')), vendedor: String(g('vendedor')), presento: String(g('presento')), proyecto: String(g('proyecto')), tipo: String(g('tipo')),
     unidad: String(g('unidad')), cliente: String(g('cliente')), dni: String(g('dni')), tipoCliente: String(g('tipoCliente')), fin: String(g('fin')), nota: String(g('nota')),
     recibio: String(g('recibio')), fRecibio: rFecha_(g('fRecibio')), faltantes: String(g('faltantes')), devol: Number(g('devol')) || 0, lote: String(g('lote')), fEntrega: rFecha_(g('fEntrega')),
-    recibioCC: String(g('recibioCC')), fRecibioCC: rFecha_(g('fRecibioCC')), exp: String(g('exp')), valido: String(g('valido')), fValido: rFecha_(g('fValido')), folios: String(g('folios')),
+    recibioCC: String(g('recibioCC')), fRecibioCC: rFecha_(g('fRecibioCC')), exp: String(g('exp')), valido: String(g('valido')), fValido: rFecha_(g('fValido')), folios: String(g('folios')), situacion: String(g('situacion') || ''),
     fechaISO: g('fecha') instanceof Date ? Utilities.formatDate(g('fecha'), 'America/Lima', 'yyyy-MM-dd') : '',
     horas: t0 instanceof Date && est !== 'VALIDADO' ? Math.round((new Date() - t0) / 36e5 * 10) / 10 : 0 };
 }
@@ -89,24 +93,28 @@ function rutaOpciones(token) {
   const u = sesion_(token); rutaPuede_(u, 'presentar', 'bajar', 'revisar');
   const bm = ss_().getSheetByName(HOJA_BM);
   return { proyecto: lista_(bm, 'E5', proyectos_(bm)), tipo: lista_(bm, 'F5', ['DEPARTAMENTO', 'ESTACIONAMIENTO', 'DEPOSITO']), vendedor: rutaVendedores_(u),
-    tipos: CHECK_TIPOS, fin: CHECK_FIN, grupos: CHECK_GRUPOS, rojo: RUTA_ROJO_H };
+    tipos: CHECK_TIPOS, fin: CHECK_FIN, grupos: CHECK_GRUPOS, rojo: RUTA_ROJO_H, situaciones: RUTA_SIT };
 }
 
 /** Vendedor presenta (o vuelve a presentar, si le devolvieron) un file. */
 function rutaPresentar(token, d, prPrevio) {
   const u = sesion_(token); rutaPuede_(u, 'presentar'); d = d || {};
-  const req = { proyecto: 'Proyecto', tipo: 'Tipo', unidad: 'N° de unidad', cliente: 'Cliente', dni: 'DNI / CE / RUC', vendedor: 'Vendedor', tipoCliente: 'Tipo de cliente', fin: 'Financiamiento' };
+  // AVISO DE VENTA: lo básico es obligatorio (proyecto, departamento, cliente, situación). DNI, tipo de cliente y financiamiento
+  // son opcionales: si faltan, Contratos los completa al validar (el formulario de registro los pide).
+  if (!String(d.tipo || '').trim()) d.tipo = 'DEPARTAMENTO';
+  const req = { proyecto: 'Proyecto', unidad: 'Departamento / N° de unidad', cliente: 'Nombres y apellidos del cliente', vendedor: 'Vendedor', situacion: 'Situación de la venta' };
   for (const k in req) if (!String(d[k] == null ? '' : d[k]).trim()) throw new Error('Falta: ' + req[k]);
-  const dni = String(d.dni).replace(/\D/g, ''); if ([8, 9, 11].indexOf(dni.length) < 0) throw new Error('DNI / CE / RUC debe tener 8, 9 u 11 dígitos.');
+  if (RUTA_SIT.indexOf(String(d.situacion).trim()) < 0) throw new Error('Elige la situación de la venta.');
+  const dni = String(d.dni || '').replace(/\D/g, ''); if (dni && [8, 9, 11].indexOf(dni.length) < 0) throw new Error('DNI / CE / RUC debe tener 8, 9 u 11 dígitos (o déjalo vacío).');
   if (!rutaVendedores_(u).some(n => norm_(n) === norm_(d.vendedor))) throw new Error('Vendedor no permitido para su usuario.');
-  if (!CHECK_TIPOS[d.tipoCliente] || !CHECK_FIN[d.fin]) throw new Error('Elige el tipo de cliente y el financiamiento.');
+  if ((d.tipoCliente && !CHECK_TIPOS[d.tipoCliente]) || (d.fin && !CHECK_FIN[d.fin])) throw new Error('Tipo de cliente o financiamiento no válido.');
   const lock = LockService.getScriptLock(); lock.waitLock(20000);
   try {
     const filas = rutaFilas_(), ahora = new Date(), uni = norm_(d.unidad).replace(/\s/g, ''), pro = norm_(d.proyecto);
     const otro = filas.find(f => String(f.r[0]) !== String(prPrevio || '') && ['VALIDADO', 'ANULADO'].indexOf(String(f.r[1])) < 0 && norm_(f.r[RC.proyecto - 1]) === pro && norm_(f.r[RC.unidad - 1]).replace(/\s/g, '') === uni);
     if (otro) throw new Error('Esa unidad ya fue presentada en ' + otro.r[0] + ' (' + otro.r[RC.cliente - 1] + ').');
     const datos = { fecha: ahora, vendedor: String(d.vendedor).trim(), presento: u.nombre, proyecto: String(d.proyecto).trim(), tipo: String(d.tipo).trim(), unidad: String(d.unidad).trim(),
-      cliente: String(d.cliente).trim().toUpperCase(), dni: dni, tipoCliente: d.tipoCliente, fin: d.fin, nota: String(d.nota || '').trim().slice(0, 500) };
+      cliente: String(d.cliente).trim().toUpperCase(), dni: dni, tipoCliente: d.tipoCliente || '', fin: d.fin || '', nota: String(d.nota || '').trim().slice(0, 500), situacion: String(d.situacion).trim() };
     if (prPrevio) {
       const x = rutaBuscar_(prPrevio), o = rutaObj_(x);
       if (o.estado !== 'DEVUELTO') throw new Error('Este file no está devuelto: no hace falta volver a presentarlo.');
@@ -158,6 +166,20 @@ function rutaRecibir(token, pr, docsOk, folios) {
     rutaLog_(pr, 'DEVUELTO', u.nombre, 'Asistente: faltan ' + falta.length + ' (' + falta.join(', ') + ')');
     log_(u.nombre, 'RUTA_DEVUELVE', pr + ' · faltan ' + falta.length);
     return { completo: false, faltantes: falta, total: req.length, vendedor: o.vendedor, cliente: o.cliente };
+  } finally { lock.releaseLock(); }
+}
+
+/** Asistente: confirma que recibió del vendedor / jefe uno o varios files (sin checklist). PRESENTADO → RECIBIDO ("En mi poder"). */
+function rutaConfirmar(token, prs) {
+  const u = sesion_(token); rutaPuede_(u, 'bajar');
+  prs = (Array.isArray(prs) ? prs : [prs]).map(String).filter(Boolean); if (!prs.length) throw new Error('Elige al menos un file.');
+  const lock = LockService.getScriptLock(); lock.waitLock(20000);
+  try {
+    const filas = rutaFilas_(), ahora = new Date();
+    const sel = prs.map(p => { const x = filas.find(f => String(f.r[0]) === p); if (!x) throw new Error('No encontré ' + p + '.'); const o = rutaObj_(x); if (o.estado !== 'PRESENTADO') throw new Error(p + ' ya no está por confirmar (' + o.estado + ').'); return { x: x, o: o }; });
+    sel.forEach(s => { rutaSet_(s.x.fila, { estado: 'RECIBIDO', recibio: u.nombre, fRecibio: ahora, docs: 'Recepción confirmada', faltantes: '' }); rutaLog_(s.o.pr, 'RECIBIDO', u.nombre, 'Recepción confirmada'); });
+    log_(u.nombre, 'RUTA_RECIBE', sel.map(s => s.o.pr).join(', '));
+    return { n: sel.length };
   } finally { lock.releaseLock(); }
 }
 
