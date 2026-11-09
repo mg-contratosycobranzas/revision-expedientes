@@ -1,6 +1,6 @@
 {
-  "version": "2026.11.09-4",
-  "notas": "Comisiones: pendiente (2do pago) visible y ventas de meses anteriores conservan su pendiente",
+  "version": "2026.11.09-5",
+  "notas": "Comisiones: pendiente manual en ventas, conceptos y ventas de meses anteriores",
   "archivos": [
     "Ruta",
     "Comisiones",
@@ -11,11 +11,11 @@
   ],
   "sha256": {
     "Ruta": "26d9ac0c5bc58dfbe6e3bd9e5b18edcb01767b90e8d8d6c17c426340d401a441",
-    "Comisiones": "12229f017482ea53372e167c981feef1653558cc7209535216584b1939b36a0e",
+    "Comisiones": "5501193ac14fad8c9a1152c37117cd733df46bd02e96d82a7900455a33818ddb",
     "Ayuda": "0f3a579cd0f522a678c9b16e0e61ea44b2683da551b5e964e7b2d6000c73c467",
     "Seguimiento": "fa95c9c531a5ad4bce253a381eb167694009a42a1e90cb423b028e085cd8f199",
     "Puntos": "75934dd8f5acb9423172e639d2ad0270ae92b032b99114c0e734f2b1d87c9691",
     "Bloqueo": "d2525650d5fa8ba65dcd55ee67ff2bd0e9472331d6487f31b9f4b0032a5dd53f"
   },
-  "firma": "3e85c8397cb2ef74fdddac41b8505c8462323ffcc48a6327a2e6d7103ae532e1"
+  "firma": "b28b03dc2be434399f7768c69652d1a8031fe6eab8daea81a5aa2dc8e8a631b3"
 }
