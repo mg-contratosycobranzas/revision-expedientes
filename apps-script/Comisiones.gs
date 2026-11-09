@@ -140,15 +140,15 @@ function comAnteriores(token, cierre, vendedor) {
       return { id: String(r[0]).trim(), cierre: ci, proyecto: txt_(r[4]), unidad: txt_(r[6]), cliente: txt_(r[7]), fin: txt_(r[19]), monto: monto, pend: pend, tramo: comTramoTxt_(n) }; });
 }
 /** Agrega al cierre una venta anterior no pagada (queda en COMISIONES_DIFERIDOS como AGREGADA: no se puede pagar dos veces). */
-function comAgregarAnterior(token, cierre, id, monto) {
-  const u = sesion_(token); puede_(u, 'accesos'); cierre = comCierreOk_(cierre); id = String(id || '').trim(); monto = Number(monto);
+function comAgregarAnterior(token, cierre, id, monto, pend) {
+  const u = sesion_(token); puede_(u, 'accesos'); cierre = comCierreOk_(cierre); id = String(id || '').trim(); monto = Number(monto); pend = Math.max(0, Number(pend) || 0);   // pend = 2do pago (escritura) según la escala
   if (isNaN(monto) || monto <= 0) throw new Error('Escribe el monto a pagar.');
   const v = ss_().getSheetByName(HOJA_BM).getRange(PRIMERA_FILA, 1, ULTIMA_FILA - PRIMERA_FILA + 1, 24).getValues(), r = v.find(z => String(z[0]).trim() === id);
   if (!r) throw new Error('No encontré ' + id + ' en BASE MAESTRA.');
   const h = comHojas_(), ori = mesNorm_(mesTxt_(r[3]));
   if (comDifFilas_(h).some(z => String(z.r[1]).trim() === id && norm_(z.r[4]) === 'PASA' && String(z.r[5]).trim())) throw new Error(id + ' ya se pasó o agregó a otro cierre.');
   const i = h.f.getLastRow() + 1; h.f.getRange(i, 1).setNumberFormat('@'); h.f.getRange(i, 6).setNumberFormat('@'); h.f.getRange(i, 9).setNumberFormat('@');
-  h.f.getRange(i, 1, 1, COM_DIF_HDR.length).setValues([fila_([ori, id, String(r[22]).trim(), String(r[23] || '').trim(), 'PASA', cierre, monto, 0, txt_(r[6]), txt_(r[4]), txt_(r[7]), r[16] instanceof Date ? r[16] : '', txt_(r[19]), 'AGREGADA', u.nombre, new Date(), ''])]);
+  h.f.getRange(i, 1, 1, COM_DIF_HDR.length).setValues([fila_([ori, id, String(r[22]).trim(), String(r[23] || '').trim(), 'PASA', cierre, monto, pend, txt_(r[6]), txt_(r[4]), txt_(r[7]), r[16] instanceof Date ? r[16] : '', txt_(r[19]), 'AGREGADA', u.nombre, new Date(), ''])]);
   log_(u.nombre, 'COMISION_AGREGADA', cierre + ' · ' + id + ' (de ' + ori + ') · ' + monto);
   return { id: id, origen: ori };
 }
