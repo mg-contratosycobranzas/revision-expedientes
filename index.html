@@ -82,6 +82,7 @@ label.l{display:block;font-size:12px;font-weight:800;color:var(--mut);margin:12p
 .path .ok{background:var(--ok);color:#fff}.path .bad{background:var(--bad);color:#fff}.path .warn{background:#E2A72E;color:#2b1d00}
 /* modal */
 .modal{position:fixed;inset:0;background:#070C1CB0;display:none;align-items:center;justify-content:center;z-index:60;padding:14px;backdrop-filter:blur(3px)}.modal.on{display:flex}
+.sheet.ancho{max-width:min(1500px,96vw)}.sheet.ancho table{font-size:13.5px!important}
 .sheet{background:var(--card);width:100%;max-width:640px;max-height:94vh;overflow:auto;border-radius:24px;padding:18px;animation:up .2s ease}
 @keyframes up{from{transform:translateY(24px);opacity:0}to{transform:none;opacity:1}}
 .chk{display:flex;gap:10px;align-items:center;border-radius:14px;padding:12px;margin:8px 0;background:var(--soft)}.chk i{font-style:normal;font-size:24px}.chk.OBSERVADO{background:var(--badbg)}.chk.PENDIENTE{background:var(--warnbg)}.chk span{flex:1}
@@ -773,7 +774,7 @@ async function sistemaUI(){const m=$('#mod'),s=$('#sheet');m.classList.add('on')
 /* ---------- comisiones del cierre: administración genera / exporta / publica; cada persona ve solo lo suyo ---------- */
 const solC=v=>'S/ '+Number(v||0).toLocaleString('es-PE',{minimumFractionDigits:0,maximumFractionDigits:2});
 async function comisionesUI(sel){const m=$('#mod'),s=$('#sheet');m.classList.add('on');s.innerHTML='<div class="skel"></div>';
- const top=`<div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><h2>💰 Comisiones del cierre</h2><button class="ib" style="background:var(--soft);color:var(--ink);border:0" id="cX" aria-label="Cerrar">✕</button></div>`;
+ const top=`<div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><h2>💰 Comisiones del cierre</h2><span style="display:flex;gap:6px">${anchoBtn()}<button class="ib" style="background:var(--soft);color:var(--ink);border:0" id="cX" aria-label="Cerrar">✕</button></span></div>`;anchoAplicar();
  try{const e=await call('comEstado',T),c=sel||e.cierres[0]||'',st=e.estado.find(x=>x.cierre===c);
   s.innerHTML=top+`<p class="mut" style="margin:0 0 10px">Se calcula con la <b>escala de comisiones</b> del portal y las ventas de <b>BASE MAESTRA</b> del cierre (solo departamentos cuentan para el tramo). Escrituras, bonos, adelantos y descuentos los completas tú en la hoja antes de publicar.</p>
   <label class="l">Cierre</label><select id="cSel">${e.cierres.map(x=>`<option ${x===c?'selected':''}>${esc(x)}</option>`).join('')}</select>
@@ -802,7 +803,7 @@ async function comisionesUI(sel){const m=$('#mod'),s=$('#sheet');m.classList.add
  }catch(x){s.innerHTML=top+`<div class="dupbox">${esc(x.message)}</div><p class="mut hint">Si dice “Operación no permitida” u “Opción no disponible”, falta instalar la actualización: 👥 Accesos → 🛠️ Actualizar sistema → ⬆️ Instalar.</p>`;$('#cX').onclick=()=>m.classList.remove('on')}}
 /* ---------- 👁️ vista previa del cierre: se ve por vendedor ANTES de escribir en el Sheet (comPrevisualizar no guarda nada) ---------- */
 async function comPreviaUI(c){const s=$('#sheet');s.innerHTML='<div class="skel"></div>';
- const top=`<div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><h2>👁️ Vista previa · ${esc(c)}</h2><button class="ib" style="background:var(--soft);color:var(--ink);border:0" id="pX" aria-label="Volver">✕</button></div>`;
+ const top=`<div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><h2>👁️ Vista previa · ${esc(c)}</h2><span style="display:flex;gap:6px">${anchoBtn()}<button class="ib" style="background:var(--soft);color:var(--ink);border:0" id="pX" aria-label="Volver">✕</button></span></div>`;anchoAplicar();
  try{let p=await call('comPrevisualizar',T,c),NOTAS=await call('comNotas',T,c).catch(()=>null);const S=solC,n2=v=>Number(v||0).toLocaleString('es-PE',{minimumFractionDigits:2,maximumFractionDigits:2}),hoyISO=new Date(Date.now()-new Date().getTimezoneOffset()*6e4).toISOString().slice(0,10);
   const mc=String(c).split(' '),mes=mc[0].slice(0,3).toLowerCase()+'-'+String(mc[1]||'').slice(2),sigC=()=>cap(String(p.siguiente||'').split(' ')[0]);
   const MALO=t=>/FUERA|SIN SUBSANAR/.test(t||''),BUENO=t=>/SIN OBS|EN FECHA/.test(t||'');
@@ -926,6 +927,12 @@ function segHtml(sg,x){if(!sg||!sg.areas)return '';const est=v=>{const n=String(
  return `<details class="card" style="margin:10px 0;padding:10px 14px"><summary>⏱️ Seguimiento · ${d||'sin registro'}</summary>
  <div style="margin-top:8px">${fila('📑 Contractual (Cierre)','CIERRE',x.ctr)}${fila('🏦 SBS','SBS',x.sbs)}
  <div class="mut" style="font-size:13px;margin-top:6px">🗓️ Registrado: ${esc(sg.registro?sg.registro.slice(0,10):'—')} · 🛠️ Subsanaciones: ${sg.subsanaciones}${sg.areas.CIERRE&&sg.areas.CIERRE.primera?' · 1ra revisión: '+esc(sg.areas.CIERRE.primera.slice(0,10)):''}</div></div></details>`}
+/* ---------- ventana ancha para cuadros grandes (comisiones): en PC se abre ampliada; el botón ⤢ alterna y se recuerda ---------- */
+const anchoPref=()=>{const v=ls.get('mgAncho');return v===null?innerWidth>=900:v==='1'};
+const anchoBtn=()=>innerWidth>=700?`<button class="ib" style="background:var(--soft);color:var(--ink);border:0" data-ancho title="Ampliar o reducir la ventana" aria-label="Ampliar o reducir la ventana">${anchoPref()?'⤡':'⤢'}</button>`:'';
+const anchoAplicar=()=>{$('#sheet').classList.toggle('ancho',innerWidth>=700&&anchoPref())};
+document.addEventListener('click',e=>{const b=e.target.closest('[data-ancho]');if(!b)return;ls.set('mgAncho',anchoPref()?'0':'1');anchoAplicar();$$('[data-ancho]').forEach(x=>x.textContent=anchoPref()?'⤡':'⤢')});
+new MutationObserver(()=>{if(!$('#mod').classList.contains('on'))$('#sheet').classList.remove('ancho')}).observe($('#mod'),{attributes:true,attributeFilter:['class']});
 /* ---------- buzón: errores, incidencias y sugerencias (texto + capturas) ---------- */
 function buzon(){const m=$('#mod'),s=$('#sheet'),st={tipo:'',caps:[]};m.classList.add('on');
  s.innerHTML=`<div style="display:flex;justify-content:space-between;gap:8px"><h2>📮 Buzón</h2><button class="ib" style="background:var(--soft);color:var(--ink);border:0" id="bzX" aria-label="Cerrar">✕</button></div>
