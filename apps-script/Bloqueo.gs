@@ -51,7 +51,8 @@ function habCalc_(u, ex) {
     rechazado: h && h.estado === 'RECHAZADO' ? { decidio: h.decidio, fecha: h.fDecision } : null,
     enviado: ex.sub ? ex.sub.fecha : '' };
   if (out.cc) return out;
-  const fuera = out.habilitacion && out.habilitacion.tipo === 'HABILITADO FUERA DE FECHA', normal = !!out.habilitacion;
+  out.excepcion = typeof habExcDe_ === 'function' ? habExcDe_(u) : null;   // excepción de plazo dada desde Accesos (usuario o TODOS)
+  const fuera = (out.habilitacion && out.habilitacion.tipo === 'HABILITADO FUERA DE FECHA') || !!out.excepcion, normal = !!out.habilitacion;
   if (ex.estado === 'SUBSANADO' && !normal) { out.bloqueado = true; out.motivo = 'ESPERA'; }
   else if (vencido && ex.estado === 'OBSERVADO' && !fuera) { out.bloqueado = true; out.motivo = 'PLAZO'; }
   return out;
@@ -114,4 +115,56 @@ function habPendientes(token) {
   const exps = {}; misExpedientes(token).forEach(x => exps[x.id] = x);
   return Object.keys(ult).filter(id => txt_(ult[id][1]) === 'PEDIDO' && exps[id]).map(id => ({ id: id, cliente: exps[id].cliente, proyecto: exps[id].proyecto, unidad: exps[id].unidad,
     pidio: txt_(ult[id][2]), fecha: habF_(ult[id][3]), motivo: txt_(ult[id][4]) }));
+}
+
+/* ---------- EXCEPCIÓN DE PLAZO por usuario o para TODOS (administración, desde Accesos) ----------
+ * Permite subsanar aunque haya vencido "Comercial presenta subsanados" del CALENDARIO, hasta la fecha y hora indicada.
+ * No quita la espera de revisión (ESPERA); solo el bloqueo por PLAZO. La subsanación igual queda marcada "fuera de plazo" en el historial.
+ * Hoja SUBSANACION_EXCEPCION: Persona (nombre de Accesos o TODOS) | Hasta | Motivo | Otorgó | Fecha | Estado (ACTIVA / QUITADA) */
+const HOJA_EXC = 'SUBSANACION_EXCEPCION', EXC_HDR = ['Persona', 'Hasta', 'Motivo', 'Otorgó', 'Fecha', 'Estado'];
+try { ['habExcLista', 'habExcGuardar', 'habExcQuitar'].forEach(f => { if (API_PUBLICA.indexOf(f) < 0) API_PUBLICA.push(f); }); if (SOLO_LECTURA.indexOf('habExcLista') < 0) SOLO_LECTURA.push('habExcLista'); } catch (e) {}
+function habExcHoja_() {
+  let h = ss_().getSheetByName(HOJA_EXC);
+  if (!h) { h = ss_().insertSheet(HOJA_EXC); h.getRange(1, 1, 1, EXC_HDR.length).setValues([EXC_HDR]).setFontWeight('bold').setBackground('#0C1A3D').setFontColor('#FFFFFF'); h.setFrozenRows(1); h.setColumnWidth(3, 300); }
+  return h;
+}
+/** Excepciones ACTIVAS y vigentes: [{fila, persona, hasta(Date), motivo, otorgo, fecha}] */
+function habExcVigentes_() {
+  const h = ss_().getSheetByName(HOJA_EXC); if (!h || h.getLastRow() < 2) return [];
+  const ahora = new Date();
+  return h.getRange(2, 1, h.getLastRow() - 1, EXC_HDR.length).getValues().map((r, i) => ({ fila: i + 2, persona: String(r[0]).trim(), hasta: r[1], motivo: txt_(r[2]), otorgo: txt_(r[3]), fecha: r[4], estado: norm_(r[5]) }))
+    .filter(x => x.estado === 'ACTIVA' && x.hasta instanceof Date && x.hasta >= ahora);
+}
+/** La excepción que aplica a este usuario (la suya o la de TODOS; la que dure más). */
+function habExcDe_(u) {
+  const yo = [norm_(u.nombre), norm_(u.ref)].filter(Boolean);
+  const l = habExcVigentes_().filter(x => norm_(x.persona) === 'TODOS' || yo.indexOf(norm_(x.persona)) >= 0).sort((a, b) => b.hasta - a.hasta);
+  return l.length ? { persona: l[0].persona, hasta: habF_(l[0].hasta), motivo: l[0].motivo, otorgo: l[0].otorgo, todos: norm_(l[0].persona) === 'TODOS' } : null;
+}
+function habExcLista(token) {
+  const u = sesion_(token); puede_(u, 'accesos');
+  return habExcVigentes_().map(x => ({ persona: x.persona, hasta: habF_(x.hasta), hastaISO: Utilities.formatDate(x.hasta, 'America/Lima', "yyyy-MM-dd'T'HH:mm"), motivo: x.motivo, otorgo: x.otorgo, fecha: habF_(x.fecha), todos: norm_(x.persona) === 'TODOS' }));
+}
+/** persona: nombre del usuario (como en Accesos) o 'TODOS' · hastaISO: 'yyyy-MM-ddTHH:mm' (hora de Lima) */
+function habExcGuardar(token, persona, hastaISO, motivo) {
+  const u = sesion_(token); puede_(u, 'accesos');
+  persona = String(persona || '').trim(); motivo = String(motivo || '').trim().slice(0, 300);
+  if (!persona) throw new Error('Elige a quién.');
+  const m = String(hastaISO || '').match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/); if (!m) throw new Error('Indica la fecha y hora hasta cuándo.');
+  const hasta = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]); if (hasta <= new Date()) throw new Error('La fecha "hasta" debe ser futura.');
+  if (hasta - new Date() > 31 * 864e5) throw new Error('Máximo 31 días: si necesitas más, vuelve a darla después.');
+  const h = habExcHoja_(), lock = LockService.getScriptLock(); lock.waitLock(20000);
+  try {
+    habExcVigentes_().filter(x => norm_(x.persona) === norm_(persona)).forEach(x => h.getRange(x.fila, 6).setValue('QUITADA'));   // reemplaza la anterior de esa persona
+    h.appendRow(fila_([norm_(persona) === 'TODOS' ? 'TODOS' : persona, hasta, motivo, u.nombre, new Date(), 'ACTIVA']));
+  } finally { lock.releaseLock(); }
+  log_(u.nombre, 'EXCEPCION_PLAZO', persona + ' hasta ' + habF_(hasta) + (motivo ? ' · ' + motivo : ''));
+  return { persona: persona, hasta: habF_(hasta) };
+}
+function habExcQuitar(token, persona) {
+  const u = sesion_(token); puede_(u, 'accesos'); persona = String(persona || '').trim();
+  const h = habExcHoja_(), l = habExcVigentes_().filter(x => norm_(x.persona) === norm_(persona)); if (!l.length) throw new Error('No hay una excepción vigente para ' + persona + '.');
+  l.forEach(x => h.getRange(x.fila, 6).setValue('QUITADA'));
+  log_(u.nombre, 'EXCEPCION_PLAZO_QUITADA', persona);
+  return { ok: true };
 }

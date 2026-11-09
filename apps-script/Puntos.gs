@@ -10,8 +10,8 @@
 const HOJA_PUN = 'SUBSANACION_PUNTOS';
 const PUN_HDR = ['ID expediente', 'Área', 'Punto', 'Estado', 'Subsanó', 'Fecha subsanación', 'Comentario de Comercial', 'Verificó', 'Fecha verificación', 'Comentario de Contratos'];
 try {
-  ['puntosEstado', 'puntosSubsanar', 'puntosVerificar'].forEach(f => { if (API_PUBLICA.indexOf(f) < 0) API_PUBLICA.push(f); });
-  if (SOLO_LECTURA.indexOf('puntosEstado') < 0) SOLO_LECTURA.push('puntosEstado');
+  ['puntosEstado', 'puntosSubsanar', 'puntosVerificar', 'puntosReglas'].forEach(f => { if (API_PUBLICA.indexOf(f) < 0) API_PUBLICA.push(f); });
+  ['puntosEstado', 'puntosReglas'].forEach(f => { if (SOLO_LECTURA.indexOf(f) < 0) SOLO_LECTURA.push(f); });
 } catch (e) {}
 
 const punClave_ = (area, punto) => norm_(area) + '|' + norm_(punto).replace(/\s+/g, ' ');
@@ -52,6 +52,9 @@ function punGuardar_(id, cambios) {
 const punLista_ = lista => (Array.isArray(lista) ? lista : []).map(p => ({ area: String(p.area || '').trim().toUpperCase(), punto: String(p.punto || '').trim().slice(0, 300), estado: String(p.estado || '').toUpperCase(), coment: String(p.coment || '').trim().slice(0, 500) }))
   .filter(p => p.punto && (p.area === 'SBS' || p.area === 'CIERRE'));
 
+/** Qué reglas tiene este motor (el portal solo habilita lo que el motor instalado permite). */
+function puntosReglas() { return { esperaPorPunto: true }; }
+
 /** Estado guardado de los puntos del expediente (el portal lo cruza con las observaciones que ya tiene). */
 function puntosEstado(token, id) {
   sesion_(token); punAcceso_(token, id);
@@ -63,7 +66,15 @@ function puntosEstado(token, id) {
 function puntosSubsanar(token, id, lista, texto, adjunto) {
   const u = sesion_(token); puede_(u, 'subsanar'); punAcceso_(token, id);
   const ps = punLista_(lista); if (!ps.length) throw new Error('Marca al menos un punto que ya subsanaste.');
-  const hb = typeof habAntesDeSubsanar_ === 'function' ? habAntesDeSubsanar_(token, id) : null;   // 🔒 Bloqueo.gs: espera de revisión o plazo vencido
+  // 🔒 Bloqueo.gs: espera de revisión o plazo vencido. Si la espera es por OTROS puntos ya enviados, se pueden enviar los puntos nuevos
+  //    (los que aún no están "POR VERIFICAR"); lo que no se puede es reenviar un punto que ya espera revisión.
+  const yaEst = {}; punFilas_(String(id).trim()).forEach(x => { yaEst[punClave_(x.r[1], x.r[2])] = norm_(x.r[3]); });
+  const repetidos = ps.filter(p => yaEst[punClave_(p.area, p.punto)] === 'POR VERIFICAR');
+  if (repetidos.length) throw new Error('Ya enviaste y está por verificar: ' + repetidos.map(p => p.punto).join(', ') + '. Espera la revisión de Contratos.');
+  const eHab = typeof habCalc_ === 'function' ? habCalc_(u, punAcceso_(token, id)) : null;
+  if (eHab && eHab.bloqueado && eHab.motivo === 'ESPERA' && eHab.vencido && !eHab.excepcion && !(eHab.habilitacion && eHab.habilitacion.tipo === 'HABILITADO FUERA DE FECHA'))
+    throw new Error('⏰ Venció el plazo para presentar subsanados (' + eHab.limite + '). Para enviar más puntos usa "Pedir habilitación".');
+  const hb = eHab && eHab.bloqueado && eHab.motivo === 'ESPERA' ? null : (typeof habAntesDeSubsanar_ === 'function' ? habAntesDeSubsanar_(token, id) : null);
   texto = String(texto || '').trim();
   const item = ps.length === 1 ? ps[0].area + ' · ' + ps[0].punto : 'Varios puntos (' + ps.length + ')';
   const det = 'Subsané: ' + ps.map(p => p.punto).join(' / ') + (texto ? '\n✍️ ' + texto : '') + (hb && !habEsCC_(u) ? habNota_(hb.hab) : '');

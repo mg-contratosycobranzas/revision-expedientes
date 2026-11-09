@@ -649,3 +649,76 @@ function comNota(token, cierre, id, texto, vendedor) {
   log_(u.nombre, 'COMISION_COMENTARIO', cierre + ' · ' + id + ' · ' + (texto || '(borrado)'));
   return { ok: true };
 }
+
+/* ---------- confirmación por persona (Contratos y Cobranzas) y conformidad de cada vendedor / jefe / gerente ----------
+ * Hoja COMISIONES_CONFORMIDAD: una fila por cierre y persona. No altera montos ni cálculos. */
+const HOJA_COM_CONF = 'COMISIONES_CONFORMIDAD';
+const COM_CONF_HDR = ['Cierre', 'Rol', 'Persona', 'Confirmado (CyC)', 'Confirmó', 'Fecha confirmación', 'Conformidad', 'Observación de la persona', 'Fecha conformidad', 'Respuesta de CyC'];
+try { ['comConfEstado', 'comConfirmar', 'comConformidad', 'misConformidad'].forEach(f => { if (API_PUBLICA.indexOf(f) < 0) API_PUBLICA.push(f); }); ['comConfEstado', 'misConformidad'].forEach(f => { if (SOLO_LECTURA.indexOf(f) < 0) SOLO_LECTURA.push(f); }); } catch (e) {}
+function comHojaConf_() {
+  const ss = ss_(); let h = ss.getSheetByName(HOJA_COM_CONF);
+  if (!h) { h = ss.insertSheet(HOJA_COM_CONF); h.getRange(1, 1, 1, COM_CONF_HDR.length).setValues([COM_CONF_HDR]).setFontWeight('bold').setBackground('#0C1A3D').setFontColor('#FFFFFF'); h.setFrozenRows(1); h.getRange('A:A').setNumberFormat('@'); h.setColumnWidth(8, 360); }
+  return h;
+}
+const comConfFecha_ = d => d instanceof Date ? Utilities.formatDate(d, 'America/Lima', 'dd/MM/yyyy HH:mm') : txt_(d);
+function comConfObj_(r) { return { confirmado: norm_(r[3]) === 'SI', confirmo: txt_(r[4]), fConf: comConfFecha_(r[5]), conformidad: norm_(r[6]), obs: txt_(r[7]), fConformidad: comConfFecha_(r[8]), respuesta: txt_(r[9]) }; }
+function comConfFila_(h, cierre, rol, nombre) {
+  const n = h.getLastRow(), v = n >= 2 ? h.getRange(2, 1, n - 1, COM_CONF_HDR.length).getValues() : [];
+  const i = v.findIndex(r => mesNorm_(mesTxt_(r[0])) === cierre && norm_(r[1]) === rol && norm_(r[2]) === norm_(nombre));
+  return i < 0 ? null : { fila: i + 2, r: v[i] };
+}
+/** Administración: estado de confirmación y conformidad de todas las personas del cierre. { 'ROL|NOMBRE': {...} } */
+function comConfEstado(token, cierre) {
+  const u = sesion_(token); puede_(u, 'accesos'); cierre = comCierreOk_(cierre);
+  const h = ss_().getSheetByName(HOJA_COM_CONF), o = {}; if (!h || h.getLastRow() < 2) return o;
+  h.getRange(2, 1, h.getLastRow() - 1, COM_CONF_HDR.length).getValues().forEach(r => { if (mesNorm_(mesTxt_(r[0])) === cierre) o[norm_(r[1]) + '|' + norm_(r[2])] = comConfObj_(r); });
+  return o;
+}
+/** Administración: confirma (o quita la confirmación de) la liquidación de una persona. Opcional: responde a su observación. */
+function comConfirmar(token, cierre, rol, nombre, si, respuesta) {
+  const u = sesion_(token); puede_(u, 'accesos'); cierre = comCierreOk_(cierre); rol = norm_(rol); nombre = String(nombre || '').trim();
+  if (['VENDEDOR', 'JEFE', 'GERENTE'].indexOf(rol) < 0 || !nombre) throw new Error('Persona no válida.');
+  const h = comHojaConf_(), lock = LockService.getScriptLock(); lock.waitLock(20000);
+  try {
+    let x = comConfFila_(h, cierre, rol, nombre);
+    if (!x) { h.appendRow(fila_([cierre, rol, nombre, '', '', '', '', '', '', ''])); x = comConfFila_(h, cierre, rol, nombre); }
+    h.getRange(x.fila, 4, 1, 3).setValues([[si ? 'SI' : '', si ? u.nombre : '', si ? new Date() : '']]);
+    // al volver a confirmar después de una observación, la conformidad queda pendiente otra vez
+    if (si && norm_(x.r[6]) === 'OBSERVADO') h.getRange(x.fila, 7, 1, 3).setValues([['', x.r[7], '']]);
+    if (respuesta != null) h.getRange(x.fila, 10).setValue(seguro_(String(respuesta).trim().slice(0, 500)));
+  } finally { lock.releaseLock(); }
+  log_(u.nombre, si ? 'COMISION_CONFIRMADA' : 'COMISION_DESCONFIRMADA', cierre + ' · ' + rol + ' ' + nombre);
+  return { ok: true };
+}
+/** Persona (vendedor / jefe / gerente): su conformidad con la liquidación publicada y confirmada. respuesta: CONFORME | OBSERVADO */
+function comConformidad(token, cierre, rol, respuesta, obs) {
+  const u = sesion_(token); cierre = comCierreOk_(cierre); rol = norm_(rol); respuesta = norm_(respuesta); obs = String(obs || '').trim().slice(0, 800);
+  if (['CONFORME', 'OBSERVADO'].indexOf(respuesta) < 0) throw new Error('Respuesta no válida.');
+  if (respuesta === 'OBSERVADO' && obs.length < 5) throw new Error('Escribe tu observación (qué no coincide).');
+  const mia = misComisiones(token).find(c => c.cierre === cierre && norm_(c.rol) === rol);
+  if (!mia) throw new Error('No encontré tu liquidación publicada de ' + cierre + '.');
+  const yo = [norm_(u.ref), norm_(u.nombre)].filter(Boolean);
+  const h = comHojaConf_(), lock = LockService.getScriptLock(); lock.waitLock(20000);
+  try {
+    const n = h.getLastRow(), v = n >= 2 ? h.getRange(2, 1, n - 1, COM_CONF_HDR.length).getValues() : [];
+    const i = v.findIndex(r => mesNorm_(mesTxt_(r[0])) === cierre && norm_(r[1]) === rol && (rol === 'GERENTE' || yo.indexOf(norm_(r[2])) >= 0)), x = i < 0 ? null : { fila: i + 2, r: v[i] };
+    if (!x || norm_(x.r[3]) !== 'SI') throw new Error('Contratos y Cobranzas aún no confirma tu liquidación de ' + cierre + '.');
+    h.getRange(x.fila, 7, 1, 3).setValues([[respuesta, seguro_(obs), new Date()]]);
+  } finally { lock.releaseLock(); }
+  log_(u.nombre, 'COMISION_' + respuesta, cierre + ' · ' + rol + (obs ? ' · ' + obs : ''));
+  if (respuesta === 'OBSERVADO') try { MailApp.sendEmail(admins_(), '⚠️ Observación de comisión · ' + u.nombre + ' · ' + cierre, u.nombre + ' (' + rol + ') observó su liquidación de ' + cierre + ':\n\n' + obs + '\n\nRevísala en el portal: Comisiones → ' + cierre + '.'); } catch (e) {}
+  return { ok: true };
+}
+/** Persona: estado de confirmación / conformidad de sus liquidaciones publicadas. { 'CIERRE|ROL': {...} } */
+function misConformidad(token) {
+  const u = sesion_(token), h = ss_().getSheetByName(HOJA_COM_CONF), o = {}; if (!h || h.getLastRow() < 2) return o;
+  const mias = misComisiones(token); if (!mias.length) return o;
+  const yo = [norm_(u.ref), norm_(u.nombre)].filter(Boolean);
+  h.getRange(2, 1, h.getLastRow() - 1, COM_CONF_HDR.length).getValues().forEach(r => {
+    const c = mesNorm_(mesTxt_(r[0])), rol = norm_(r[1]);
+    if (!mias.some(m => m.cierre === c && norm_(m.rol) === rol)) return;
+    if (rol !== 'GERENTE' && yo.indexOf(norm_(r[2])) < 0) return;
+    o[c + '|' + rol] = comConfObj_(r);
+  });
+  return o;
+}
