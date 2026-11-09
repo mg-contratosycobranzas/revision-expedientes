@@ -596,3 +596,23 @@ function comEditarConcepto(token, cierre, cid, concepto, monto) {
   log_(u.nombre, 'COMISION_CONCEPTO_EDITADO', cierre + ' · ' + cid + ' · ' + antes + ' → ' + concepto + ' ' + monto);
   return { ok: true };
 }
+
+/* ---------- bono, adelanto y descuento de una persona en el cierre (columnas H, I, J de COMISIONES_RESUMEN) ---------- */
+try { if (API_PUBLICA.indexOf('comExtras') < 0) API_PUBLICA.push('comExtras'); } catch (e) {}
+function comExtras(token, cierre, rol, nombre, v) {
+  const u = sesion_(token); puede_(u, 'accesos'); cierre = comCierreOk_(cierre); rol = norm_(rol); nombre = String(nombre || '').trim(); v = v || {};
+  if (['VENDEDOR', 'JEFE', 'GERENTE'].indexOf(rol) < 0 || !nombre) throw new Error('Persona no válida.');
+  const num = (x, t) => { const n = x === '' || x == null ? 0 : Number(x); if (isNaN(n) || n < 0) throw new Error(t + ': escribe un monto válido (0 o más).'); return n; };
+  const b = num(v.bono, 'Bono'), a = num(v.adelanto, 'Adelanto'), d = num(v.dscto, 'Descuento');
+  const h = comHojas_(), lock = LockService.getScriptLock(); lock.waitLock(20000);
+  let antes = [];
+  try {
+    const f = comFilas_(h.r), i = f.findIndex(r => mesNorm_(mesTxt_(r[0])) === cierre && norm_(r[1]) === rol && norm_(r[2]) === norm_(nombre));
+    if (i < 0) throw new Error('Primero genera el cuadro de ' + cierre + ' ("Confirmar y generar el cuadro").');
+    if (String(f[i][14] || '').trim()) throw new Error(nombre + ' ya figura como PAGADO en ' + cierre + '. Primero quita la marca de pagado.');
+    antes = [f[i][7], f[i][8], f[i][9]];
+    h.r.getRange(i + 2, 8, 1, 3).setValues([[b || '', a || '', d || '']]);
+  } finally { lock.releaseLock(); }
+  log_(u.nombre, 'COMISION_EXTRAS', cierre + ' · ' + rol + ' ' + nombre + ' · bono/adelanto/dscto ' + antes.map(x => x || 0).join('/') + ' → ' + [b, a, d].join('/'));
+  return { bono: b, adelanto: a, dscto: d };
+}
