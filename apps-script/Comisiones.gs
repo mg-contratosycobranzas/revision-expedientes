@@ -540,3 +540,59 @@ function misComisiones(token) {
   const k = c => { const p = c.split(' '); return Number(p[1]) * 12 + MESES_.indexOf(p[0]); };
   return out.sort((a, b) => k(b.cierre) - k(a.cierre));
 }
+
+/* ---------- corregir errores: quitar o cambiar el monto de una venta de mes anterior · editar un concepto manual ---------- */
+try { ['comQuitarAnterior', 'comMontoAnterior', 'comEditarConcepto'].forEach(f => { if (API_PUBLICA.indexOf(f) < 0) API_PUBLICA.push(f); }); } catch (e) {}
+/** Si la persona ya figura como PAGADA en ese cierre, no se permite cambiar sus montos (primero se quita la marca de pago). */
+function comNoPagado_(h, cierre, vendedor) {
+  const p = comFilas_(h.r).find(r => mesNorm_(mesTxt_(r[0])) === cierre && norm_(r[1]) === 'VENDEDOR' && norm_(r[2]) === norm_(vendedor));
+  if (p && String(p[14] || '').trim()) throw new Error(vendedor + ' ya figura como PAGADO en ' + cierre + '. Primero quita la marca de pagado.');
+}
+function comAgregada_(h, cierre, id) {
+  const x = comDifFilas_(h).find(z => String(z.r[1]).trim() === id && norm_(z.r[13]) === 'AGREGADA' && mesNorm_(mesTxt_(z.r[5])) === cierre);
+  if (!x) throw new Error('No encontré la venta ' + id + ' agregada a ' + cierre + '.');
+  return x;
+}
+/** Quita del cierre una venta de mes anterior agregada por error (vuelve a quedar como "no pagada"). */
+function comQuitarAnterior(token, cierre, id) {
+  const u = sesion_(token); puede_(u, 'accesos'); cierre = comCierreOk_(cierre); id = String(id || '').trim();
+  const h = comHojas_(), lock = LockService.getScriptLock(); lock.waitLock(20000);
+  try {
+    const x = comAgregada_(h, cierre, id); comNoPagado_(h, cierre, x.r[2]);
+    h.f.deleteRow(x.fila);
+    comBorrar_(h.d, r => mesNorm_(mesTxt_(r[0])) === cierre && String(r[13]).trim() === id && /^AGREGADA DE/i.test(String(r[12])));   // si el cuadro ya estaba generado
+  } finally { lock.releaseLock(); }
+  log_(u.nombre, 'COMISION_AGREGADA_QUITADA', cierre + ' · ' + id);
+  return { ok: true };
+}
+/** Cambia el monto de una venta de mes anterior agregada. */
+function comMontoAnterior(token, cierre, id, monto) {
+  const u = sesion_(token); puede_(u, 'accesos'); cierre = comCierreOk_(cierre); id = String(id || '').trim(); monto = Number(monto);
+  if (isNaN(monto) || monto <= 0) throw new Error('Escribe un monto válido (mayor a 0). Para no pagarla, usa "Quitar".');
+  const h = comHojas_(), lock = LockService.getScriptLock(); lock.waitLock(20000);
+  let antes = 0;
+  try {
+    const x = comAgregada_(h, cierre, id); comNoPagado_(h, cierre, x.r[2]); antes = Number(x.r[6]) || 0;
+    h.f.getRange(x.fila, 7).setValue(monto); h.f.getRange(x.fila, 15, 1, 2).setValues([[u.nombre, new Date()]]);
+    comFilas_(h.d).forEach((r, i) => { if (mesNorm_(mesTxt_(r[0])) === cierre && String(r[13]).trim() === id && /^AGREGADA DE/i.test(String(r[12]))) h.d.getRange(i + 2, 11).setValue(monto); });
+  } finally { lock.releaseLock(); }
+  log_(u.nombre, 'COMISION_AGREGADA_MONTO', cierre + ' · ' + id + ' · ' + antes + ' → ' + monto);
+  return { ok: true, monto: monto };
+}
+/** Edita el texto y/o el monto de un concepto manual (MAN-…). Monto negativo = descuento. */
+function comEditarConcepto(token, cierre, cid, concepto, monto) {
+  const u = sesion_(token); puede_(u, 'accesos'); cierre = comCierreOk_(cierre); cid = String(cid || '').trim();
+  if (!/^MAN-\d+$/.test(cid)) throw new Error('Solo se pueden editar conceptos agregados a mano.');
+  concepto = String(concepto || '').trim().toUpperCase(); monto = Number(monto);
+  if (concepto.length < 3) throw new Error('Escribe el concepto (ej.: BONO 3 DORM).'); if (!monto || isNaN(monto)) throw new Error('Escribe el monto (negativo si es descuento).');
+  const h = comHojas_(), lock = LockService.getScriptLock(); lock.waitLock(20000);
+  let antes = '';
+  try {
+    const v = comFilas_(h.d), i = v.findIndex(r => mesNorm_(mesTxt_(r[0])) === cierre && String(r[13]).trim() === cid);
+    if (i < 0) throw new Error('No encontré ese concepto en ' + cierre + '.');
+    comNoPagado_(h, cierre, v[i][2]); antes = v[i][12] + ' ' + v[i][10];
+    h.d.getRange(i + 2, 11).setValue(monto); h.d.getRange(i + 2, 13).setValue(seguro_(concepto));
+  } finally { lock.releaseLock(); }
+  log_(u.nombre, 'COMISION_CONCEPTO_EDITADO', cierre + ' · ' + cid + ' · ' + antes + ' → ' + concepto + ' ' + monto);
+  return { ok: true };
+}
