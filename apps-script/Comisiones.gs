@@ -616,3 +616,33 @@ function comExtras(token, cierre, rol, nombre, v) {
   log_(u.nombre, 'COMISION_EXTRAS', cierre + ' · ' + rol + ' ' + nombre + ' · bono/adelanto/dscto ' + antes.map(x => x || 0).join('/') + ' → ' + [b, a, d].join('/'));
   return { bono: b, adelanto: a, dscto: d };
 }
+
+/* ---------- comentarios por venta / concepto del cierre (hoja COMISIONES_COMENTARIOS: no altera los cálculos) ---------- */
+const HOJA_COM_NOTA = 'COMISIONES_COMENTARIOS';
+try { ['comNotas', 'comNota'].forEach(f => { if (API_PUBLICA.indexOf(f) < 0) API_PUBLICA.push(f); }); if (SOLO_LECTURA.indexOf('comNotas') < 0) SOLO_LECTURA.push('comNotas'); } catch (e) {}
+function comHojaNota_() {
+  const ss = ss_(); let h = ss.getSheetByName(HOJA_COM_NOTA);
+  if (!h) { h = ss.insertSheet(HOJA_COM_NOTA); h.getRange(1, 1, 1, 6).setValues([['Cierre', 'ID (expediente o concepto)', 'Comentario', 'Escribió', 'Fecha', 'Vendedor']]).setFontWeight('bold').setBackground('#0C1A3D').setFontColor('#FFFFFF'); h.setFrozenRows(1); h.setColumnWidth(3, 420); h.getRange('A:B').setNumberFormat('@'); }
+  return h;
+}
+/** Comentarios del cierre: { id: {t, quien, fecha} } */
+function comNotas(token, cierre) {
+  const u = sesion_(token); puede_(u, 'accesos'); cierre = comCierreOk_(cierre);
+  const h = ss_().getSheetByName(HOJA_COM_NOTA), o = {}; if (!h || h.getLastRow() < 2) return o;
+  h.getRange(2, 1, h.getLastRow() - 1, 5).getValues().forEach(r => { if (mesNorm_(mesTxt_(r[0])) === cierre && String(r[2]).trim()) o[String(r[1]).trim()] = { t: String(r[2]), quien: String(r[3]), fecha: r[4] instanceof Date ? Utilities.formatDate(r[4], 'America/Lima', 'dd/MM/yyyy HH:mm') : txt_(r[4]) }; });
+  return o;
+}
+/** Guarda (o borra, si el texto va vacío) el comentario de una venta o concepto del cierre. */
+function comNota(token, cierre, id, texto, vendedor) {
+  const u = sesion_(token); puede_(u, 'accesos'); cierre = comCierreOk_(cierre); id = String(id || '').trim(); texto = String(texto || '').trim().slice(0, 500);
+  if (!id) throw new Error('Falta la venta.');
+  const h = comHojaNota_(), lock = LockService.getScriptLock(); lock.waitLock(20000);
+  try {
+    const n = h.getLastRow(), v = n >= 2 ? h.getRange(2, 1, n - 1, 2).getValues() : [], i = v.findIndex(r => mesNorm_(mesTxt_(r[0])) === cierre && String(r[1]).trim() === id);
+    if (!texto) { if (i >= 0) h.deleteRow(i + 2); }
+    else if (i >= 0) h.getRange(i + 2, 3, 1, 3).setValues([[seguro_(texto), u.nombre, new Date()]]);
+    else h.appendRow(fila_([cierre, id, texto, u.nombre, new Date(), String(vendedor || '')]));
+  } finally { lock.releaseLock(); }
+  log_(u.nombre, 'COMISION_COMENTARIO', cierre + ' · ' + id + ' · ' + (texto || '(borrado)'));
+  return { ok: true };
+}
