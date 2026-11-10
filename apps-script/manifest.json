@@ -1,6 +1,6 @@
 {
-  "version": "2026.11.09-6",
-  "notas": "Conformidad de comisiones, subsanación por punto y excepción de plazo",
+  "version": "2026.11.10-1",
+  "notas": "Puntos: historial por punto para reportes de tiempos y reincidencias",
   "archivos": [
     "Ruta",
     "Comisiones",
@@ -14,8 +14,8 @@
     "Comisiones": "760cd0d2e4284a9244744742eb60d7bbeba8d3162fc7205b87352b5ac2a5fd15",
     "Ayuda": "0f3a579cd0f522a678c9b16e0e61ea44b2683da551b5e964e7b2d6000c73c467",
     "Seguimiento": "fa95c9c531a5ad4bce253a381eb167694009a42a1e90cb423b028e085cd8f199",
-    "Puntos": "8a431e92296d0eb74c5abe6cd3f39ea19f489cfd2998db3f84e99d0358e2b5e2",
+    "Puntos": "a10a47621815105858a70cf52cb99cf3c32af8c38d6c42665596c5a78508671c",
     "Bloqueo": "d80b7cf346df67cea2646a1d6451752916fa44ee6672eb5c02a673c2ac54735d"
   },
-  "firma": "c75750ad5302c8f97fe252db597a73e280edee9951e4d863a1201d16f069f99a"
+  "firma": "4c9f3f07ff5a2b5d92e5eeaa24b8eee2376c5313cc6f7e5407bbe77d55176f5c"
 }
