@@ -16,10 +16,10 @@ const HOJA_COM_DIF = 'COMISIONES_DIFERIDOS';
 // Decisión por venta (PAGA / PASA / AUTO), monto manual y ventas de meses anteriores agregadas (Subsanación = AGREGADA)
 const COM_DIF_HDR = ['Cierre origen', 'ID expediente', 'Vendedor', 'Jefe', 'Decisión', 'Pasa a', 'Monto S/', 'Pendiente S/', 'Dpto', 'Proyecto', 'Cliente', 'Fecha minuta', 'Tipo financ.', 'Subsanación', 'Decidió', 'Fecha', 'Monto manual S/', 'Pendiente manual S/'];
 const COM_RES_HDR = ['Cierre', 'Rol', 'Persona', 'Jefe de ventas', 'Unidades', 'Tramo', 'Comisión S/', 'Bono S/', 'Adelanto S/', 'Dscto S/', 'T. Pagar S/', 'Pendiente S/', 'Publicado', 'Generado', 'Pagado (fecha)', 'Pago (medio / N° op.)', 'Marcó el pago'];
-const COM_FN = ['comEstado', 'comPrevisualizar', 'comDecidir', 'comAjustar', 'comConcepto', 'comQuitarConcepto', 'comAnteriores', 'comAgregarAnterior', 'comPagar', 'comGenerar', 'comPublicar', 'comExportar', 'misComisiones'];
+const COM_FN = ['comEstado', 'comPrevisualizar', 'comDecidir', 'comAjustar', 'comConcepto', 'comQuitarConcepto', 'comAnteriores', 'comAgregarAnterior', 'comPagar', 'comGenerar', 'comPublicar', 'comExportar', 'misComisiones', 'comEscrituras', 'comPagarEscritura', 'comAgregarVendedor', 'comQuitarVendedor'];
 try {
   COM_FN.forEach(f => { if (API_PUBLICA.indexOf(f) < 0) API_PUBLICA.push(f); });
-  ['comEstado', 'comPrevisualizar', 'comAnteriores', 'misComisiones'].forEach(f => { if (SOLO_LECTURA.indexOf(f) < 0) SOLO_LECTURA.push(f); });
+  ['comEstado', 'comPrevisualizar', 'comAnteriores', 'misComisiones', 'comEscrituras'].forEach(f => { if (SOLO_LECTURA.indexOf(f) < 0) SOLO_LECTURA.push(f); });
 } catch (e) {}
 
 /* ---------- escala (sale de la misma tabla que ve cada rol en Ayuda) ---------- */
@@ -120,7 +120,7 @@ function comConcepto(token, cierre, vendedor, jefe, concepto, monto, dpto, pend)
 }
 function comQuitarConcepto(token, cierre, cid) {
   const u = sesion_(token); puede_(u, 'accesos'); cierre = comCierreOk_(cierre); cid = String(cid || '');
-  if (!/^MAN-\d+$/.test(cid)) throw new Error('Solo se pueden quitar conceptos agregados a mano.');
+  if (!/^(MAN-\d+|ESC-.+)$/.test(cid)) throw new Error('Solo se pueden quitar conceptos agregados a mano o pagos de escritura.');
   comBorrar_(comHojas_().d, r => mesNorm_(mesTxt_(r[0])) === cierre && String(r[13]) === cid);
   log_(u.nombre, 'COMISION_CONCEPTO_QUITADO', cierre + ' · ' + cid);
   return { ok: true };
@@ -206,7 +206,8 @@ function comCalcular_(cierre, h, token) {
 
   const bm = ss_().getSheetByName(HOJA_BM), v = bm.getRange(PRIMERA_FILA, 1, ULTIMA_FILA - PRIMERA_FILA + 1, 24).getValues();
   const filas = v.filter(r => r[22] && mesNorm_(mesTxt_(r[3])) === cierre);
-  if (!filas.length && !difs.some(z => norm_(z.r[4]) === 'PASA' && mesNorm_(mesTxt_(z.r[5])) === cierre)) throw new Error('No hay ventas con cierre ' + cierre + ' en BASE MAESTRA.');
+  const extras = comFilas_(h.d).filter(r => mesNorm_(mesTxt_(r[0])) === cierre && norm_(r[14]) !== 'AUTO');   // conceptos, escrituras y vendedores agregados a mano
+  if (!filas.length && !extras.length && !difs.some(z => norm_(z.r[4]) === 'PASA' && mesNorm_(mesTxt_(z.r[5])) === cierre)) throw new Error('No hay ventas con cierre ' + cierre + ' en BASE MAESTRA.');
   const depas = filas.filter(r => /DEPART/i.test(String(r[5]))), otros = filas.filter(r => !/DEPART/i.test(String(r[5])));
 
   // por vendedor: tramo según la cantidad de departamentos del mes
@@ -240,6 +241,12 @@ function comCalcular_(cierre, h, token) {
     det.push([cierre, jefe, ven, txt_(r[8]), '', txt_(r[9]), txt_(r[10]), r[11] instanceof Date ? r[11] : txt_(r[11]), '', txt_(r[12]), Number(r[6]) || 0, Number(r[7]) || 0, ag ? 'AGREGADA DE ' + ori + ' (no se pagó)' : 'DIFERIDO DE ' + ori, id, 'AUTO', ag ? 'VENTA DE ' + ori : txt_(r[13])]);
     info[id] = info[id] || { subs: ag ? 'VENTA DE ' + ori : txt_(r[13]), tipo: ag ? 'AGREGADA' : 'DIFERIDO', estado: '', razon: ag ? 'venta anterior agregada' : 'viene de ' + ori, decision: 'PAGA', defecto: 'PAGA', monto: Number(r[6]) || 0, pend: Number(r[7]) || 0, diferido: ori, agregada: ag, quien: ag ? txt_(r[14]) : '' };
     if (!porV[k] && !res.some(x => x[1] === 'VENDEDOR' && norm_(x[2]) === k)) { const m = manual['VENDEDOR|' + k] || ['', '', '']; res.push([cierre, 'VENDEDOR', ven, jefe, 0, '— (solo diferidos)', null, m[0], m[1], m[2], null, null, 'NO', ahora]); }
+  });
+  // vendedores SIN ventas del mes que igual cobran (2do pago a la escritura, bono, devolución…): entran con 0 departamentos (no cambian ningún tramo)
+  extras.forEach(r => {
+    const ven = String(r[2]).trim(), k = norm_(ven);
+    if (!ven || porV[k] || res.some(x => x[1] === 'VENDEDOR' && norm_(x[2]) === k)) return;
+    const m = manual['VENDEDOR|' + k] || ['', '', '']; res.push([cierre, 'VENDEDOR', ven, String(r[1] || '').trim(), 0, COM_SOLO_EXTRA, null, m[0], m[1], m[2], null, null, 'NO', ahora]);
   });
   // jefes de ventas: tramo según TODAS las unidades (departamentos) del equipo en el mes; minuta = unidades × 70% del tramo
   if (esc.jefe) {
@@ -280,11 +287,11 @@ function comPrevisualizar(token, cierre) {
   const u = sesion_(token); puede_(u, 'accesos');
   cierre = comCierreOk_(cierre);
   const h = comHojas_(), c = comCalcular_(cierre, h, token), n = x => Number(x) || 0;
-  const lineas = c.det.concat(comFilas_(h.d).filter(r => mesNorm_(mesTxt_(r[0])) === cierre && norm_(r[14]) !== 'AUTO'));
+  const lineas = c.det.concat(comFilas_(h.d).filter(r => mesNorm_(mesTxt_(r[0])) === cierre && norm_(r[14]) !== 'AUTO' && norm_(r[14]) !== 'VENDEDOR'));
   const linea = d => { const inf = norm_(d[14]) === 'AUTO' ? c.info[txt_(d[13])] || {} : {};
-    return { dpto: txt_(d[3]), est: txt_(d[4]), proyecto: txt_(d[5]), cliente: txt_(d[6]), minuta: d[7] instanceof Date ? Utilities.formatDate(d[7], 'America/Lima', 'dd/MM/yy') : txt_(d[7]), escritura: txt_(d[8]), fin: txt_(d[9]),
+    return { dpto: txt_(d[3]), est: txt_(d[4]), proyecto: txt_(d[5]), cliente: txt_(d[6]), minuta: d[7] instanceof Date ? Utilities.formatDate(d[7], 'America/Lima', 'dd/MM/yy') : txt_(d[7]), escritura: d[8] instanceof Date ? Utilities.formatDate(d[8], 'America/Lima', 'dd/MM/yy') : txt_(d[8]), fin: txt_(d[9]),
       monto: n(d[10]), pendiente: n(d[11]), concepto: txt_(d[12]), id: txt_(d[13]), manual: norm_(d[14]) !== 'AUTO',
-      subs: txt_(d[15]) || inf.subs || '', tipo: inf.tipo || (norm_(d[14]) === 'MANUAL' ? 'CONCEPTO' : ''), estado: inf.estado || '', razon: inf.razon || '', decision: inf.decision || '', manualDec: !!inf.manual, quien: inf.quien || '',
+      subs: txt_(d[15]) || inf.subs || '', tipo: inf.tipo || (norm_(d[14]) === 'MANUAL' ? 'CONCEPTO' : norm_(d[14]) === 'ESCRITURA' ? 'ESCRITURA' : ''), estado: inf.estado || '', razon: inf.razon || '', decision: inf.decision || '', manualDec: !!inf.manual, quien: inf.quien || '',
       defecto: inf.defecto || '', montoOrig: inf.monto || 0, pendOrig: inf.pend || 0, montoManual: inf.montoManual == null ? null : inf.montoManual, pendManual: inf.pendManual == null ? null : inf.pendManual, pasaA: inf.pasaA || '', diferido: inf.diferido || '', agregada: !!inf.agregada }; };
   const personas = c.res.map(x => {
     const v = norm_(x[1]) === 'VENDEDOR', l = v ? lineas.filter(d => norm_(d[2]) === norm_(x[2])).map(linea) : [];
@@ -292,7 +299,8 @@ function comPrevisualizar(token, cierre) {
     return { rol: x[1], nombre: x[2], jefe: x[3], unidades: x[4], tramo: txt_(x[5]), comision: com, bono: n(x[7]), adelanto: n(x[8]), dscto: n(x[9]),
       pendiente: pen, total: com + n(x[7]) - n(x[8]) - n(x[9]), lineas: l, pagado: x[14] ? { fecha: x[14] instanceof Date ? Utilities.formatDate(x[14], 'America/Lima', 'dd/MM/yyyy') : txt_(x[14]), medio: txt_(x[15]), quien: txt_(x[16]) } : null };
   });
-  return { cierre: cierre, departamentos: c.depas.length, vendedores: Object.keys(c.porV).length, revisar: c.sinMod, yaGenerado: c.previos.length > 0,
+  const conBloque = {}; personas.forEach(x => { if (norm_(x.rol) === 'VENDEDOR') conBloque[norm_(x.nombre)] = 1; });
+  return { cierre: cierre, departamentos: c.depas.length, vendedores: Object.keys(c.porV).length, revisar: c.sinMod, libres: comVendedoresBM_().filter(v => !conBloque[norm_(v)]), yaGenerado: c.previos.length > 0,
     publicado: c.previos.some(r => norm_(r[12]) === 'SI'), total: personas.reduce((a, p) => a + p.total, 0), personas: personas, avisadas: comAvisadas_(cierre, c.porV),
     siguiente: c.sig, plazo: (typeof plazo_ === 'function' && plazo_(cierre, 'X')) ? fmtPlazo_(plazo_(cierre, 'X')) : '',
     // filtro: cuántas ventas del cierre se subsanaron dentro y fuera de fecha (una por expediente)
@@ -435,7 +443,7 @@ function comAnchos_(sh) {
 /** Arma (o reemplaza) el archivo del cierre en Drive. Devuelve el Spreadsheet. */
 function comArmar_(cierre) {
   SpreadsheetApp.flush();
-  const h = comHojas_(), det = comFilas_(h.d).filter(r => mesNorm_(mesTxt_(r[0])) === cierre), res = comFilas_(h.r).filter(r => mesNorm_(mesTxt_(r[0])) === cierre);
+  const h = comHojas_(), det = comFilas_(h.d).filter(r => mesNorm_(mesTxt_(r[0])) === cierre && norm_(r[14]) !== 'VENDEDOR'), res = comFilas_(h.r).filter(r => mesNorm_(mesTxt_(r[0])) === cierre);
   if (!res.length) throw new Error('Primero genera las comisiones de ' + cierre + '.');
   const nombre = 'COMISIONES - ' + cierre, pr = PropertiesService.getScriptProperties(), clave = 'COM_EXP_' + cierre.replace(/\s/g, '_');
   let libro = null;
@@ -537,7 +545,7 @@ function misComisiones(token) {
     if (!mio) return;
     const cierre = mesNorm_(mesTxt_(x[0]));
     out.push({ cierre: cierre, rol: rol, unidades: x[4], tramo: String(x[5]), comision: Number(x[6]) || 0, bono: Number(x[7]) || 0, adelanto: Number(x[8]) || 0, dscto: Number(x[9]) || 0, total: Number(x[10]) || 0, pendiente: Number(x[11]) || 0, pagado: x[14] ? (x[14] instanceof Date ? Utilities.formatDate(x[14], 'America/Lima', 'dd/MM/yyyy') : txt_(x[14])) : '',
-      lineas: rol !== 'VENDEDOR' ? [] : det.filter(l => mesNorm_(mesTxt_(l[0])) === cierre && norm_(l[2]) === quien).map(l => ({ dpto: txt_(l[3]), est: txt_(l[4]), proyecto: txt_(l[5]), cliente: txt_(l[6]), minuta: txt_(l[7]), escritura: txt_(l[8]), fin: txt_(l[9]), monto: Number(l[10]) || 0, pendiente: Number(l[11]) || 0, concepto: txt_(l[12]) })) });
+      lineas: rol !== 'VENDEDOR' ? [] : det.filter(l => mesNorm_(mesTxt_(l[0])) === cierre && norm_(l[2]) === quien && norm_(l[14]) !== 'VENDEDOR').map(l => ({ dpto: txt_(l[3]), est: txt_(l[4]), proyecto: txt_(l[5]), cliente: txt_(l[6]), minuta: txt_(l[7]), escritura: txt_(l[8]), tipo: norm_(l[14]), fin: txt_(l[9]), monto: Number(l[10]) || 0, pendiente: Number(l[11]) || 0, concepto: txt_(l[12]) })) });
   });
   const k = c => { const p = c.split(' '); return Number(p[1]) * 12 + MESES_.indexOf(p[0]); };
   return out.sort((a, b) => k(b.cierre) - k(a.cierre));
@@ -721,4 +729,82 @@ function misConformidad(token) {
     o[c + '|' + rol] = comConfObj_(r);
   });
   return o;
+}
+
+/* ---------- 🖋️ 2DO PAGO A LA ESCRITURA y ➕ VENDEDORES SIN VENTAS DEL MES ----------
+ * El pendiente (30 % / 50 %) de cada venta ya queda en COMISIONES_DETALLE (columna "Pendiente S/") cuando se genera su cierre.
+ * Al firmarse la escritura, se paga en el cierre elegido como una línea ESCRITURA (ID "ESC-" + ID de la venta): no se puede pagar dos veces.
+ * Un vendedor sin departamentos en el mes entra al cuadro si tiene escrituras, conceptos o si se le agrega a mano (línea VENDEDOR, monto 0). */
+const COM_SOLO_EXTRA = '— (solo escrituras / conceptos)';
+const comK_ = c => { const p = String(c).split(' '); return Number(p[1]) * 12 + MESES_.indexOf(p[0]); };
+const comFechaTxt_ = d => d instanceof Date ? Utilities.formatDate(d, 'America/Lima', 'dd/MM/yy') : txt_(d);
+/** Vendedores que aparecen en BASE MAESTRA (para "Agregar vendedor al cierre"). */
+function comVendedoresBM_() {
+  const v = ss_().getSheetByName(HOJA_BM).getRange(PRIMERA_FILA, 23, ULTIMA_FILA - PRIMERA_FILA + 1, 1).getValues(), s = {};
+  v.forEach(r => { const n = String(r[0] || '').trim(); if (n && !s[norm_(n)]) s[norm_(n)] = n; });
+  return Object.keys(s).map(k => s[k]).sort((a, b) => a.localeCompare(b, 'es'));
+}
+/** Pendientes a la escritura de este cierre o anteriores: los que faltan pagar y los ya pagados en este cierre. */
+function comEscrituras(token, cierre) {
+  const u = sesion_(token); puede_(u, 'accesos'); cierre = comCierreOk_(cierre);
+  const v = comFilas_(comHojas_().d), hoy = comK_(cierre), pagadas = {}, cand = {};
+  v.forEach(r => { if (norm_(r[14]) === 'ESCRITURA') pagadas[String(r[13]).trim().replace(/^ESC-/, '')] = { cierre: mesNorm_(mesTxt_(r[0])), fecha: comFechaTxt_(r[8]), monto: Number(r[10]) || 0 }; });
+  v.forEach(r => {
+    const pend = Number(r[11]) || 0, id = String(r[13]).trim(), ci = mesNorm_(mesTxt_(r[0])), o = norm_(r[14]);
+    if (pend <= 0 || !id || o === 'ESCRITURA' || o === 'VENDEDOR' || !/^[A-Z]+ \d{4}$/.test(ci) || comK_(ci) > hoy) return;
+    if (cand[id] && cand[id].pend >= pend) return;
+    cand[id] = { id: id, cierre: ci, vendedor: txt_(r[2]), jefe: txt_(r[1]), dpto: txt_(r[3]), proyecto: txt_(r[5]), cliente: txt_(r[6]), minuta: comFechaTxt_(r[7]), fin: txt_(r[9]), pend: pend };
+  });
+  return Object.keys(cand).map(id => { const c = cand[id]; c.pagada = pagadas[id] || null; return c; })
+    .filter(c => !c.pagada || c.pagada.cierre === cierre)
+    .sort((a, b) => (a.pagada ? 1 : 0) - (b.pagada ? 1 : 0) || a.vendedor.localeCompare(b.vendedor, 'es') || comK_(a.cierre) - comK_(b.cierre));
+}
+/** Paga en este cierre el 2do pago de una venta (fecha = día de la firma de escritura, aaaa-mm-dd). */
+function comPagarEscritura(token, cierre, id, fecha, monto) {
+  const u = sesion_(token); puede_(u, 'accesos'); cierre = comCierreOk_(cierre); id = String(id || '').trim(); monto = Number(monto);
+  if (isNaN(monto) || monto <= 0) throw new Error('Escribe el monto a pagar.');
+  const m = String(fecha || '').match(/^(\d{4})-(\d{2})-(\d{2})$/); if (!m) throw new Error('Pon la fecha de la escritura.');
+  const f = new Date(+m[1], +m[2] - 1, +m[3]); if (f > new Date(Date.now() + 864e5)) throw new Error('La fecha de escritura no puede ser futura.');
+  const h = comHojas_(), lock = LockService.getScriptLock(); lock.waitLock(20000);
+  let o;
+  try {
+    const v = comFilas_(h.d);
+    const ya = v.find(r => norm_(r[14]) === 'ESCRITURA' && String(r[13]).trim() === 'ESC-' + id);
+    if (ya) throw new Error('La escritura de esta venta ya se pagó en ' + mesNorm_(mesTxt_(ya[0])) + '.');
+    o = v.filter(r => String(r[13]).trim() === id && (Number(r[11]) || 0) > 0 && ['ESCRITURA', 'VENDEDOR'].indexOf(norm_(r[14])) < 0).sort((a, b) => (Number(b[11]) || 0) - (Number(a[11]) || 0))[0];
+    if (!o) throw new Error('No encontré el pendiente de ' + id + '. Si la venta es de antes del sistema, usa "Agregar concepto".');
+    comNoPagado_(h, cierre, o[2]);
+    const i = h.d.getLastRow() + 1; h.d.getRange(i, 1).setNumberFormat('@'); h.d.getRange(i, 4).setNumberFormat('@');
+    h.d.getRange(i, 1, 1, COM_DET_HDR.length).setValues([fila_([cierre, o[1], o[2], o[3], o[4], o[5], o[6], o[7], f, o[9], monto, 0, 'FIRMA DE ESCRITURA', 'ESC-' + id, 'ESCRITURA', ''])]);
+    h.d.getRange(i, 8, 1, 2).setNumberFormat('dd/mm/yyyy');
+  } finally { lock.releaseLock(); }
+  log_(u.nombre, 'COMISION_ESCRITURA', cierre + ' · ' + id + ' · ' + o[2] + ' · ' + monto + ' · escritura ' + Utilities.formatDate(f, 'America/Lima', 'dd/MM/yyyy'));
+  return { id: 'ESC-' + id, vendedor: txt_(o[2]) };
+}
+/** Agrega al cuadro del cierre a un vendedor sin ventas del mes (para ponerle conceptos). El grupo sale de su última venta en BASE MAESTRA. */
+function comAgregarVendedor(token, cierre, vendedor) {
+  const u = sesion_(token); puede_(u, 'accesos'); cierre = comCierreOk_(cierre); vendedor = String(vendedor || '').trim();
+  if (!vendedor) throw new Error('Elige el vendedor.');
+  const bm = ss_().getSheetByName(HOJA_BM).getRange(PRIMERA_FILA, 1, ULTIMA_FILA - PRIMERA_FILA + 1, 24).getValues().filter(r => norm_(r[22]) === norm_(vendedor));
+  if (!bm.length) throw new Error('No encontré a ' + vendedor + ' en BASE MAESTRA.');
+  const ult = bm[bm.length - 1], nombre = String(ult[22]).trim(), jefe = String(ult[23] || '').trim(), h = comHojas_();
+  if (comFilas_(h.d).some(r => mesNorm_(mesTxt_(r[0])) === cierre && norm_(r[2]) === norm_(nombre) && norm_(r[14]) === 'VENDEDOR')) return { ya: true, nombre: nombre };
+  const i = h.d.getLastRow() + 1; h.d.getRange(i, 1).setNumberFormat('@');
+  h.d.getRange(i, 1, 1, COM_DET_HDR.length).setValues([fila_([cierre, jefe, nombre, '', '', '', '', '', '', '', 0, 0, '', 'VEN-' + Date.now(), 'VENDEDOR', ''])]);
+  log_(u.nombre, 'COMISION_VENDEDOR_AGREGADO', cierre + ' · ' + nombre);
+  return { nombre: nombre, jefe: jefe };
+}
+/** Quita del cuadro a un vendedor agregado a mano (solo si ya no tiene escrituras ni conceptos en el cierre). */
+function comQuitarVendedor(token, cierre, vendedor) {
+  const u = sesion_(token); puede_(u, 'accesos'); cierre = comCierreOk_(cierre); vendedor = String(vendedor || '').trim();
+  const h = comHojas_(), k = norm_(vendedor), lock = LockService.getScriptLock(); lock.waitLock(20000);
+  try {
+    const mias = comFilas_(h.d).filter(r => mesNorm_(mesTxt_(r[0])) === cierre && norm_(r[2]) === k);
+    if (mias.some(r => norm_(r[14]) !== 'VENDEDOR')) throw new Error('Primero quita sus escrituras y conceptos de ' + cierre + '.');
+    comNoPagado_(h, cierre, vendedor);
+    comBorrar_(h.d, r => mesNorm_(mesTxt_(r[0])) === cierre && norm_(r[2]) === k && norm_(r[14]) === 'VENDEDOR');
+    comBorrar_(h.r, r => mesNorm_(mesTxt_(r[0])) === cierre && norm_(r[1]) === 'VENDEDOR' && norm_(r[2]) === k && !(Number(r[4]) > 0));
+  } finally { lock.releaseLock(); }
+  log_(u.nombre, 'COMISION_VENDEDOR_QUITADO', cierre + ' · ' + vendedor);
+  return { ok: true };
 }

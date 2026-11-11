@@ -1,6 +1,6 @@
 {
-  "version": "2026.11.10-3",
-  "notas": "Registro sin aviso, correo por ingreso de ventas y resumen de puntos",
+  "version": "2026.11.11-1",
+  "notas": "Pagos por escritura, vendedores sin ventas del mes y resumen de observaciones en el tablero",
   "archivos": [
     "Ruta",
     "Comisiones",
@@ -12,12 +12,12 @@
   ],
   "sha256": {
     "Ruta": "da3a8e6a0cb2692ea12031e285aee5c4fc8447f8fa5d0b684dbe44d333df8ec6",
-    "Comisiones": "760cd0d2e4284a9244744742eb60d7bbeba8d3162fc7205b87352b5ac2a5fd15",
+    "Comisiones": "8f17d6ebfd92eef5bbc46d803dad82ad8da38cd338e289e852fe8f4a8301a635",
     "Ayuda": "0f3a579cd0f522a678c9b16e0e61ea44b2683da551b5e964e7b2d6000c73c467",
     "Seguimiento": "fa95c9c531a5ad4bce253a381eb167694009a42a1e90cb423b028e085cd8f199",
-    "Puntos": "a10a47621815105858a70cf52cb99cf3c32af8c38d6c42665596c5a78508671c",
+    "Puntos": "e70c16f36010ad60077bcbac04fd3ab51bdf9b90764b0db394ade0d80723ff8e",
     "Bloqueo": "d80b7cf346df67cea2646a1d6451752916fa44ee6672eb5c02a673c2ac54735d",
     "Tiempos": "d44e5a406e8a9ddc0ff208b1a31b9e402d58f67ea86a2f6f6a434ad8a2c2a9ae"
   },
-  "firma": "a6abc205056f8d288e64edbf1dc07687877ecc4bbab31b95c355c7907c79ac9c"
+  "firma": "684685ca65ea9584db4cd793a9159175de5345b66a792acd9d0f61454a4be6ac"
 }

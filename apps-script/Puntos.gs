@@ -13,8 +13,8 @@ const PUN_HDR = ['ID expediente', 'Área', 'Punto', 'Estado', 'Subsanó', 'Fecha
 const HOJA_EVT = 'SUBSANACION_EVENTOS';
 const EVT_HDR = ['Fecha', 'ID expediente', 'Mes de cierre', 'Área', 'Punto', 'Evento', 'Ronda', 'Usuario', 'Plazo', 'Comentario'];
 try {
-  ['puntosEstado', 'puntosSubsanar', 'puntosVerificar', 'puntosReglas'].forEach(f => { if (API_PUBLICA.indexOf(f) < 0) API_PUBLICA.push(f); });
-  ['puntosEstado', 'puntosReglas'].forEach(f => { if (SOLO_LECTURA.indexOf(f) < 0) SOLO_LECTURA.push(f); });
+  ['puntosEstado', 'puntosSubsanar', 'puntosVerificar', 'puntosReglas', 'puntosTablero'].forEach(f => { if (API_PUBLICA.indexOf(f) < 0) API_PUBLICA.push(f); });
+  ['puntosEstado', 'puntosReglas', 'puntosTablero'].forEach(f => { if (SOLO_LECTURA.indexOf(f) < 0) SOLO_LECTURA.push(f); });
 } catch (e) {}
 
 const punClave_ = (area, punto) => norm_(area) + '|' + norm_(punto).replace(/\s+/g, ' ');
@@ -86,7 +86,34 @@ const punLista_ = lista => (Array.isArray(lista) ? lista : []).map(p => ({ area:
   .filter(p => p.punto && (p.area === 'SBS' || p.area === 'CIERRE'));
 
 /** Qué reglas tiene este motor (el portal solo habilita lo que el motor instalado permite). */
-function puntosReglas() { return { esperaPorPunto: true }; }
+function puntosReglas() { return { esperaPorPunto: true, tablero: true }; }
+
+/** TABLERO: para el resumen de cada tarjeta (🔴 CIERRE 4 obs. · 🟠 SBS 2 por verificar…). Solo lectura.
+ *  Por expediente observado / subsanado: los documentos en OBSERVADO de la ficha (mismo nombre que en "Subsanar por punto")
+ *  y la etapa guardada de cada punto. Las observaciones escritas ya vienen en la lista de expedientes. */
+function puntosTablero(token) {
+  sesion_(token);
+  const out = {}, L = s => String(s || '').replace(/\s+/g, ' ').trim();
+  misExpedientes(token).forEach(x => { if (x.estado === 'OBSERVADO' || x.estado === 'SUBSANADO') out[x.id] = { it: [], st: [] }; });
+  if (!Object.keys(out).length) return out;
+  if (typeof FICHA_HOJAS !== 'undefined') Object.keys(FICHA_HOJAS).forEach(area => {
+    try {
+      const cfg = FICHA_HOJAS[area], sh = ss_().getSheetByName(cfg.hoja); if (!sh || sh.getLastRow() < cfg.f0) return;
+      const lc = sh.getLastColumn(), h4 = sh.getRange(4, 1, 1, lc).getDisplayValues()[0].map(L), h5 = area === 'SBS' ? sh.getRange(5, 1, 1, lc).getDisplayValues()[0].map(L) : h4.map(() => '');
+      const g4 = h4.slice(); sh.getRange(4, 1, 1, lc).getMergedRanges().forEach(m => { const v = L(m.getDisplayValue()); for (let c = m.getColumn(); c <= m.getLastColumn(); c++) g4[c - 1] = v; });
+      const nombre = t => t.replace(/^TITU\.?$/i, 'Titular').replace(/^C[OÓ]NY\.?$/i, 'Cónyuge'), tit = [];
+      for (let col = cfg.c0; col < cfg.c0 + cfg.n; col++) {   // mismo nombre que arma la ficha (leerFicha_ / detalleCompleto_)
+        const k = col - 1, sub = area === 'SBS' ? h5[k] : '', grupo = area === 'SBS' ? g4[k] : '', t = nombre(sub || h4[k] || h5[k] || ('Columna ' + col));
+        tit.push((grupo && grupo !== t ? grupo + ' · ' : '') + t);
+      }
+      const n = sh.getLastRow() - cfg.f0 + 1, ids = sh.getRange(cfg.f0, 1, n, 1).getDisplayValues(), vals = sh.getRange(cfg.f0, cfg.c0, n, cfg.n).getDisplayValues();
+      ids.forEach((r, i) => { const o = out[String(r[0]).trim()]; if (!o) return; vals[i].forEach((v, k) => { if (norm_(v) === 'OBSERVADO') o.it.push([area, tit[k]]); }); });
+    } catch (e) {}
+  });
+  const h = ss_().getSheetByName(HOJA_PUN), np = h ? h.getLastRow() : 0;
+  if (np > 1) h.getRange(2, 1, np - 1, 4).getValues().forEach(r => { const o = out[String(r[0]).trim()]; if (o) o.st.push([txt_(r[1]), txt_(r[2]), txt_(r[3]) || 'PENDIENTE']); });
+  return out;
+}
 
 /** Estado guardado de los puntos del expediente (el portal lo cruza con las observaciones que ya tiene). */
 function puntosEstado(token, id) {
