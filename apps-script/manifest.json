@@ -1,6 +1,6 @@
 {
-  "version": "2026.11.11-1",
-  "notas": "Pagos por escritura, vendedores sin ventas del mes y resumen de observaciones en el tablero",
+  "version": "2026.11.11-2",
+  "notas": "Comisiones para Gerencia (solo lectura) y hoja RESUMEN GERENCIA en el Excel",
   "archivos": [
     "Ruta",
     "Comisiones",
@@ -12,12 +12,12 @@
   ],
   "sha256": {
     "Ruta": "da3a8e6a0cb2692ea12031e285aee5c4fc8447f8fa5d0b684dbe44d333df8ec6",
-    "Comisiones": "8f17d6ebfd92eef5bbc46d803dad82ad8da38cd338e289e852fe8f4a8301a635",
+    "Comisiones": "a5a6247da5c22f139ad3560db2a2267eef7b7050bfadd882afae63f40d5e86cc",
     "Ayuda": "0f3a579cd0f522a678c9b16e0e61ea44b2683da551b5e964e7b2d6000c73c467",
     "Seguimiento": "fa95c9c531a5ad4bce253a381eb167694009a42a1e90cb423b028e085cd8f199",
     "Puntos": "e70c16f36010ad60077bcbac04fd3ab51bdf9b90764b0db394ade0d80723ff8e",
     "Bloqueo": "d80b7cf346df67cea2646a1d6451752916fa44ee6672eb5c02a673c2ac54735d",
     "Tiempos": "d44e5a406e8a9ddc0ff208b1a31b9e402d58f67ea86a2f6f6a434ad8a2c2a9ae"
   },
-  "firma": "684685ca65ea9584db4cd793a9159175de5345b66a792acd9d0f61454a4be6ac"
+  "firma": "e5db3782ddcc87ccef1df662f7c12ca24ef37d9da5be4678a33c28855ffefca7"
 }

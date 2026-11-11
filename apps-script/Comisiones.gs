@@ -474,6 +474,7 @@ function comArmar_(cierre) {
     sh.getRange(4, 8).setFormula('=D4+E4-F4-G4').setBackground(COM_COL.verde).setFontWeight('bold').setBorder(true, true, true, true, false, false);
     sh.getRange(4, 4, 1, 5).setNumberFormat(COM_SOL);
   }
+  try { comHojaGerencia_(libro.insertSheet('RESUMEN GERENCIA', 0), comGerenciaDatos_(cierre)); } catch (e) { try { log_('SISTEMA', 'COMISIONES_RESUMEN_GERENCIA_ERROR', cierre + ' · ' + e.message); } catch (z) {} }
   libro.deleteSheet(tmp);
   if (libro.getName() !== nombre) libro.rename(nombre);
   SpreadsheetApp.flush();
@@ -807,4 +808,73 @@ function comQuitarVendedor(token, cierre, vendedor) {
   } finally { lock.releaseLock(); }
   log_(u.nombre, 'COMISION_VENDEDOR_QUITADO', cierre + ' · ' + vendedor);
   return { ok: true };
+}
+/* ---------- 💼 COMISIONES · GERENCIA (solo lectura) ----------
+ * Permiso nuevo "comisiones_ver": ve los cierres YA GENERADOS (resumen, grupos, proyectos, vendedores, tendencia y alertas)
+ * y descarga el Excel del cierre (con la hoja RESUMEN GERENCIA). No puede confirmar, pagar, ajustar ni publicar. */
+try {
+  if (PERMISOS.indexOf('comisiones_ver') < 0) PERMISOS.push('comisiones_ver');
+  ['comGerencia', 'comGerenciaExcel'].forEach(f => { if (API_PUBLICA.indexOf(f) < 0) API_PUBLICA.push(f); });
+  if (SOLO_LECTURA.indexOf('comGerencia') < 0) SOLO_LECTURA.push('comGerencia');
+} catch (e) {}
+function comPuedeGer_(u) { if (u.permisos.indexOf('comisiones_ver') < 0 && u.permisos.indexOf('accesos') < 0) puede_(u, 'comisiones_ver'); }
+function comGerenciaDatos_(cierre) {
+  const h = comHojas_(), R = comFilas_(h.r), D = comFilas_(h.d), n = x => Number(x) || 0, cOf = r => mesNorm_(mesTxt_(r[0]));
+  const gen = [...new Set(R.map(cOf).filter(c => /^[A-Z]+ \d{4}$/.test(c)))].sort((a, b) => comK_(b) - comK_(a));
+  if (!gen.length) return { cierres: [], cierre: '' };
+  cierre = cierre && gen.indexOf(mesNorm_(cierre)) >= 0 ? mesNorm_(cierre) : gen[0];
+  const totDe = c => R.filter(r => cOf(r) === c).reduce((a, r) => a + n(r[6]) + n(r[7]) - n(r[8]) - n(r[9]), 0);
+  const res = R.filter(r => cOf(r) === cierre), det = D.filter(r => cOf(r) === cierre && norm_(r[14]) !== 'VENDEDOR');
+  const per = res.map(r => ({ rol: norm_(r[1]), nombre: txt_(r[2]), jefe: txt_(r[3]), unidades: n(r[4]), tramo: txt_(r[5]), comision: n(r[6]), bono: n(r[7]), adelanto: n(r[8]), dscto: n(r[9]),
+    total: n(r[6]) + n(r[7]) - n(r[8]) - n(r[9]), pendiente: n(r[11]), publicado: norm_(r[12]) === 'SI',
+    pagado: r[14] ? (r[14] instanceof Date ? Utilities.formatDate(r[14], 'America/Lima', 'dd/MM/yyyy') : txt_(r[14])) : '' }))
+    .sort((a, b) => ['VENDEDOR', 'JEFE', 'GERENTE'].indexOf(a.rol) - ['VENDEDOR', 'JEFE', 'GERENTE'].indexOf(b.rol) || b.total - a.total);
+  const total = per.reduce((a, p) => a + p.total, 0), pagado = per.filter(p => p.pagado).reduce((a, p) => a + p.total, 0), pendiente = per.reduce((a, p) => a + p.pendiente, 0);
+  const ven = per.filter(p => p.rol === 'VENDEDOR'), gr = {};
+  ven.forEach(p => { const k = p.jefe || 'SIN JEFE', g = gr[norm_(k)] = gr[norm_(k)] || { grupo: k, depas: 0, vendedores: 0, total: 0, jefe: 0 }; g.depas += p.unidades; g.vendedores++; g.total += p.total; });
+  per.filter(p => p.rol === 'JEFE').forEach(p => { const g = gr[norm_(p.nombre)] = gr[norm_(p.nombre)] || { grupo: p.nombre, depas: 0, vendedores: 0, total: 0, jefe: 0 }; g.total += p.total; g.jefe += p.total; });
+  const pr = {}; det.forEach(d => { const m = n(d[10]); if (!m) return; const k = txt_(d[5]) || 'Conceptos / otros', o = pr[k] = pr[k] || { proyecto: k, lineas: 0, total: 0 }; o.total += m; if (norm_(d[14]) === 'AUTO' && txt_(d[5])) o.lineas++; });
+  const anu = typeof anulados_ === 'function' ? anulados_() : {};
+  const bm = ss_().getSheetByName(HOJA_BM).getRange(PRIMERA_FILA, 1, ULTIMA_FILA - PRIMERA_FILA + 1, 24).getValues().filter(r => r[22] && !anu[String(r[0]).trim()] && mesNorm_(mesTxt_(r[3])) === cierre);
+  const vendido = bm.reduce((a, r) => { const m = typeof r[17] === 'number' ? r[17] : Number(String(r[17]).replace(/[^\d.-]/g, '')); return a + (isFinite(m) ? m : 0); }, 0);
+  const ix = gen.indexOf(cierre), ant = gen[ix + 1] || '';
+  const tend = gen.slice(ix, ix + 6).reverse().map(c => ({ cierre: c, total: totDe(c), depas: R.filter(r => cOf(r) === c && norm_(r[1]) === 'VENDEDOR').reduce((a, r) => a + n(r[4]), 0) }));
+  const pasan = comDifFilas_(h).filter(z => mesNorm_(mesTxt_(z.r[0])) === cierre && norm_(z.r[4]) === 'PASA' && norm_(z.r[13]) !== 'AGREGADA');
+  const esc = det.filter(d => norm_(d[14]) === 'ESCRITURA');
+  let obs = []; try { const hc = ss_().getSheetByName(HOJA_COM_CONF); if (hc && hc.getLastRow() > 1) obs = hc.getRange(2, 1, hc.getLastRow() - 1, COM_CONF_HDR.length).getValues().filter(r => mesNorm_(mesTxt_(r[0])) === cierre && norm_(r[6]) === 'OBSERVADO').map(r => txt_(r[2])); } catch (e) {}
+  return { cierres: gen, cierre: cierre, anterior: ant, totalAnterior: ant ? totDe(ant) : null, total: total, pagado: pagado, programado: total - pagado, pendiente: pendiente,
+    depas: ven.reduce((a, p) => a + p.unidades, 0), vendido: vendido, ventas: bm.length, publicado: per.some(p => p.publicado), personas: per,
+    grupos: Object.keys(gr).map(k => gr[k]).sort((a, b) => b.total - a.total), proyectos: Object.keys(pr).map(k => pr[k]).sort((a, b) => b.total - a.total), tendencia: tend,
+    alertas: { pasan: { n: pasan.length, monto: pasan.reduce((a, z) => a + n(z.r[6]) + n(z.r[7]), 0) }, escrituras: { n: esc.length, monto: esc.reduce((a, d) => a + n(d[10]), 0) }, observadas: obs } };
+}
+function comGerencia(token, cierre) { const u = sesion_(token); comPuedeGer_(u); return comGerenciaDatos_(cierre); }
+/** Excel del cierre (formato CIERRE DE MES + hoja RESUMEN GERENCIA) para quien tiene "Comisiones: ver". */
+function comGerenciaExcel(token, cierre) {
+  const u = sesion_(token); comPuedeGer_(u); const G = comGerenciaDatos_(cierre); if (!G.cierre) throw new Error('Aún no hay cierres de comisiones generados.');
+  const lock = LockService.getScriptLock(); lock.waitLock(30000);
+  let libro; try { libro = comArmar_(G.cierre); } finally { lock.releaseLock(); }
+  log_(u.nombre, 'COMISIONES_GERENCIA_EXCEL', G.cierre);
+  return { nombre: libro.getName(), archivo: comDescarga_(libro, 'xlsx', libro.getName()) };
+}
+/** Hoja RESUMEN GERENCIA (primera pestaña del Excel del cierre). */
+function comHojaGerencia_(sh, G) {
+  if (!G || !G.cierre) return;
+  const C = COM_COL, pct = G.vendido ? G.total / G.vendido : 0;
+  [[1, 20], [2, 210], [3, 190], [4, 70], [5, 150], [6, 110], [7, 90], [8, 90], [9, 90], [10, 110], [11, 110], [12, 130]].forEach(x => sh.setColumnWidth(x[0], x[1]));
+  sh.setHiddenGridlines(true); sh.getRange('A:L').setFontFamily('Arial').setFontSize(10);
+  sh.getRange(2, 2, 1, 11).merge().setValue('RESUMEN GERENCIA · COMISIONES ' + G.cierre).setBackground('#2F5597').setFontColor('#FFFFFF').setFontWeight('bold').setFontSize(12);
+  sh.getRange(4, 2, 1, 7).setValues([['TOTAL CIERRE', 'PAGADO', 'PROGRAMADO', 'PENDIENTE ESCRITURA', 'MONTO VENDIDO', '% COSTO', 'DEPAS']]).setBackground(C.naranja).setFontWeight('bold');
+  sh.getRange(5, 2, 1, 7).setValues([[G.total, G.pagado, G.programado, G.pendiente, G.vendido, pct, G.depas]]).setFontWeight('bold');
+  sh.getRange(5, 2, 1, 5).setNumberFormat(COM_SOL); sh.getRange(5, 7).setNumberFormat('0.00%');
+  let f = 7;
+  sh.getRange(f, 2, 1, 11).setValues([['PERSONA', 'GRUPO', 'DEPAS', 'TRAMO', 'COMISIÓN', 'BONO', 'ADELANTO', 'DSCTO', 'T. PAGAR', 'PENDIENTE', 'ESTADO']]).setBackground(C.naranja).setFontWeight('bold'); f++;
+  const filas = G.personas.map(p => [(p.rol === 'VENDEDOR' ? '' : p.rol === 'JEFE' ? 'JEFE · ' : 'GERENTE · ') + p.nombre.toUpperCase(), (p.rol === 'VENDEDOR' ? p.jefe : p.nombre).toUpperCase(), p.unidades, p.tramo, p.comision, p.bono, p.adelanto, p.dscto, p.total, p.pendiente, p.pagado ? 'PAGADO ' + p.pagado : 'PROGRAMADO']);
+  if (filas.length) { sh.getRange(f, 2, filas.length, 11).setValues(filas.map(fila_)); sh.getRange(f, 6, filas.length, 6).setNumberFormat(COM_SOL); sh.getRange(f, 10, filas.length, 1).setBackground(C.verde).setFontWeight('bold');
+    filas.forEach((r, i) => { if (!/^PAGADO/.test(r[10])) sh.getRange(f + i, 12).setBackground(C.aviso).setFontColor(C.rojo); }); f += filas.length; }
+  sh.getRange(f, 2).setValue('TOTAL').setFontWeight('bold'); sh.getRange(f, 10).setValue(G.total).setNumberFormat(COM_SOL).setFontWeight('bold'); f += 2;
+  sh.getRange(f, 2, 1, 4).setValues([['GRUPO', 'VENDEDORES', 'DEPAS', 'TOTAL S/']]).setBackground(C.naranja).setFontWeight('bold'); f++;
+  if (G.grupos.length) { sh.getRange(f, 2, G.grupos.length, 4).setValues(G.grupos.map(g => [g.grupo.toUpperCase(), g.vendedores, g.depas, g.total])); sh.getRange(f, 5, G.grupos.length, 1).setNumberFormat(COM_SOL); f += G.grupos.length; }
+  f++;
+  sh.getRange(f, 2, 1, 3).setValues([['PROYECTO', 'VENTAS', 'COMISIONES S/']]).setBackground(C.naranja).setFontWeight('bold'); f++;
+  if (G.proyectos.length) { sh.getRange(f, 2, G.proyectos.length, 3).setValues(G.proyectos.map(p => [p.proyecto, p.lineas, p.total])); sh.getRange(f, 4, G.proyectos.length, 1).setNumberFormat(COM_SOL); }
 }
