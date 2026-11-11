@@ -435,7 +435,7 @@ const chat=[];if(x.obsSbs||String(x.sbs).toUpperCase()==='OBSERVADO')chat.push(`
    $$('#fic select[data-a]').forEach(s=>s.onchange=()=>{s.className='fs '+fc(s.value);auto(s.dataset.a);vib(8)});
    $$('#fic [data-x]').forEach(el=>{el.oninput=el.onchange=()=>{const a=el.dataset.xa,k=el.dataset.x;if(k==='obs'){auto(a)}else TOQ[a][k]=1;if(el.tagName==='SELECT')el.className='fs '+fc(el.value)}});
    $$('#fic [data-n1]').forEach(b=>b.onclick=()=>{const a=b.dataset.n1,n=X(a,'nrev');n.value=(+n.value||0)+1;TOQ[a].nrev=1;vib(10)});
-   $$('#fic [data-vok]').forEach(b=>b.onclick=()=>{const a=b.dataset.vok;$$(`#fic select[data-a="${a}"]`).forEach(s=>{if(!s.disabled&&(!s.value||s.value.toUpperCase()==='PENDIENTE')&&[...s.options].some(o=>o.value==='OK')){s.value='OK';s.className='fs ok'}});auto(a);vib(15)})};
+   $$('#fic [data-vok]').forEach(b=>b.onclick=()=>{const a=b.dataset.vok;$$(`#fic select[data-a="${a}"]`).forEach(s=>{if(!s.disabled&&(!s.value||s.value.toUpperCase()==='PENDIENTE')&&[...s.options].some(o=>o.value==='OK')){s.value='OK';s.className='fs ok'}});auto(a);vib(15)});fichaSync(null,id)};
   (pF||call('ficha',T,id)).then(f=>{FI=f;if(!f||(!f.CIERRE&&!f.SBS))throw 0;pintaF();$('#rvTxt').placeholder='Mensaje para el vendedor (opcional)…'}).catch(e=>{FI=null;$('#fic').innerHTML=`<div class="tip" style="border-left-color:var(--bad)"><b>⚠️ No se pudo abrir la ficha de CIERRE y SBS</b><div>${esc(e&&e.message?e.message:'El expediente no tiene fila en CIERRE ni en SBS.')}${e&&e.message?' · El Apps Script necesita Ficha.gs y una “Nueva versión” implementada.':''}</div></div>`;$('#rvOld').classList.remove('hide')});
   const rvViejo=$('#rvGo').onclick;
   $('#rvGo').onclick=async ev=>{if(!FI)return rvViejo(ev);const b=$('#rvGo'),tx=$('#rvTxt').value.trim(),ex={};
@@ -482,6 +482,22 @@ const pK=(a,p)=>String(a).toUpperCase()+'|'+String(p).toUpperCase().replace(/\s+
 function puntosDe(x,items){const L=[],vis={},add=(area,p)=>{p=String(p||'').trim();if(p.length<2)return;const k=pK(area,p);if(vis[k])return;vis[k]=1;L.push({area,punto:p})};
  const parte=t=>String(t||'').split(/\s*[\/\n;]\s*/).map(s=>s.trim()).filter(Boolean);
  parte(x.obsSbs).forEach(p=>add('SBS',p));parte(x.obsCtr).forEach(p=>add('CIERRE',p));(items||[]).filter(i=>i.estado==='OBSERVADO').forEach(i=>add(i.area,i.item));return L}
+/* puntos CONFORME → casilla de la ficha CIERRE / SBS en OK (solo en pantalla: se guarda con 💾 Guardar revisión) */
+let FSYNC={id:null,P:[]};
+function fichaSync(P,id){if(P)FSYNC={id,P};else if(FSYNC.id!==id)return;const f=$('#fic');if(!f)return;
+ const nz=s=>String(s||'').toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\s+/g,' ').trim(),ok={};
+ FSYNC.P.filter(p=>p.estado==='CONFORME').forEach(p=>ok[nz(p.area)+'|'+nz(p.punto)]=p.punto);
+ const hechos=[];let g='';
+ $$('#fic .fg, #fic .fr').forEach(el=>{if(el.classList.contains('fg')){g=el.textContent;return}
+  const s=el.querySelector('select[data-a]');if(!s||s.disabled||s.dataset.sync)return;const a=nz(s.dataset.a),t=(el.querySelector('span')||{}).textContent||'',v=s.value.toUpperCase();
+  const p=ok[a+'|'+nz(g+' · '+t)]||ok[a+'|'+nz(t)];
+  if(!p||!['OBSERVADO','PENDIENTE',''].includes(v)||![...s.options].some(o=>o.value==='OK'))return;
+  s.value='OK';s.dataset.sync='1';s.style.outline='3px solid var(--or)';s.title='Marcado OK porque el punto ya está conforme. Se guarda con 💾 Guardar revisión.';s.dispatchEvent(new Event('change'));hechos.push(s.dataset.a+' · '+p)});
+ if(!hechos.length&&!$('#ficSync'))return;
+ const faltan=[];['SBS','CIERRE'].forEach(a=>{const q=FSYNC.P.filter(p=>p.area===a&&p.estado!=='CONFORME');if(!q.length)return;faltan.push(a+': '+q.map(p=>p.punto).join(' · '));
+  const e=$(`#fic [data-xa="${a}"][data-x="estado"]`);if(e&&!e.disabled&&e.value!=='OBSERVADO'&&[...e.options].some(o=>o.value==='OBSERVADO')){e.value='OBSERVADO';e.dispatchEvent(new Event('change'))}});
+ let n=$('#ficSync');if(!n){f.insertAdjacentHTML('afterbegin','<div class="tip" id="ficSync" style="border-left-color:var(--or)"></div>');n=$('#ficSync')}
+ const tot=$$('#fic select[data-sync]').length;n.innerHTML=`<b>✏️ Marqué OK ${tot} casilla${tot>1?'s':''} que ya aprobaste en Subsanación por punto</b> (resaltadas en naranja).<br>Revisa y pulsa <b>💾 Guardar revisión</b> para pasarlo al Excel. Si no guardas, el Excel no cambia.${faltan.length?`<br>🔴 El estado sigue en <b>OBSERVADO</b> porque aún faltan puntos: ${esc(faltan.join(' / '))}`:''}`}
 async function puntosUI(id,x,d,rev,pP,pH){const box=$('#pts');if(!box)return;const base=puntosDe(x,d.items);if(!base.length)return;
  let est=[],H={};try{est=await pP}catch(e){return}   // si el motor aún no tiene Puntos.gs, se queda como antes
  try{H=(await pH)||{}}catch(e){H={}}
@@ -512,7 +528,7 @@ async function puntosUI(id,x,d,rev,pP,pH){const box=$('#pts');if(!box)return;con
    if(!pen.length&&!por.length)h+='<div class="tip" style="border-left-color:var(--ok)">✅ Todos los puntos están conformes. Actualiza el estado a <b>APROBADO</b> en la ficha de CIERRE / SBS de abajo.</div>';
   }
   if(ok.length)h+=`<details style="margin-top:8px"><summary class="mut">✅ Aprobados (${ok.length})</summary>${ok.map(p=>fila(p,'<span class="pill COMPLETO" style="font-size:11px">Conforme</span>')).join('')}</details>`;
-  const tx=$('#pTx')?$('#pTx').value:'';box.innerHTML=h;if($('#pTx'))$('#pTx').value=tx;
+  const tx=$('#pTx')?$('#pTx').value:'';box.innerHTML=h;if($('#pTx'))$('#pTx').value=tx;if(rev)fichaSync(P,id);
   $$('#pts [data-ps]').forEach(b=>b.onclick=()=>{SEL[b.dataset.ps]=!SEL[b.dataset.ps];CONF=false;ULT='';vib(8);pinta()});
   $$('#pts [data-pv]').forEach(b=>b.onclick=()=>{const k=b.dataset.pv;DEC[k]=DEC[k]===b.dataset.v?undefined:b.dataset.v;if(!DEC[k])delete DEC[k];vib(8);pinta()});
   if($('#pCam')){$('#pCam').onclick=()=>$('#pFoto').click();$('#pFoto').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{FOTO=await foto(f);$('#pPv').textContent='📎 Foto lista'}catch(z){toast('No se pudo leer la foto',1)}}}
