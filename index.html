@@ -65,6 +65,7 @@ label.l{display:block;font-size:12px;font-weight:800;color:var(--mut);margin:12p
 .hi{padding:8px 0;border-bottom:1px solid var(--line);font-size:13px;line-height:1.4}.hi:last-child{border-bottom:0}
 .rof{padding:10px 12px;border:1px solid var(--line);border-radius:12px;font-weight:700;min-height:20px}
 .rvb{display:inline-block;border-radius:99px;padding:1px 8px;font-size:11px;font-weight:700;margin:3px 4px 0 0;background:var(--soft);color:var(--ink);white-space:nowrap}
+.vres{margin:0 0 12px;padding:12px 14px}.vnum{display:flex;align-items:baseline;gap:8px;margin:6px 0 4px}.vnum b{font-size:28px;color:var(--ink)}.vnum span{color:var(--mut);font-weight:700}.vbar{height:10px;border-radius:99px;background:var(--soft);overflow:hidden}.vbar i{display:block;height:100%;background:var(--ok);border-radius:99px}.vch{display:flex;gap:12px;flex-wrap:wrap;margin-top:8px;font-size:13px;font-weight:700}
 .oc{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}.oc .o{font-size:11px;font-weight:800;border-radius:6px;padding:2px 7px;white-space:nowrap}.o.bad{background:var(--badbg);color:var(--bad)}.o.sub{background:var(--subbg);color:var(--sub)}.o.ok{background:var(--okbg);color:var(--ok)}.hdn{font-size:11px;font-weight:800;color:var(--bad);background:var(--badbg);border-radius:99px;padding:1px 7px;margin-right:4px}
 .bars.rbars .br{grid-template-columns:1fr auto;row-gap:4px}.bars.rbars .br span{white-space:normal;overflow:visible}.bars.rbars .br i{grid-column:1/-1;grid-row:2;height:10px}
 .hi .qr{flex-wrap:wrap;overflow:visible}
@@ -124,7 +125,7 @@ details ul{margin:0;padding-left:20px}details li{margin:6px 0}
 .tw tr.hoy td{background:var(--subbg)}.tw tr.pas td{opacity:.55}
 .tip{background:var(--soft);border-left:4px solid var(--or);border-radius:12px;padding:11px 13px;margin:8px 0;font-size:14px}.tip b{color:var(--ink)}
 /* dashboard / reporte interno */
-.kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin:12px 0}.kpi div{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;box-shadow:var(--sh)}.kpi b{display:block;font-size:26px;color:var(--ink)}.kpi small{color:var(--mut);font-weight:700}
+.kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin:12px 0}.kpi div{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;box-shadow:var(--sh)}.kpi b{display:block;font-size:26px;color:var(--ink)}.kpi small{color:var(--mut);font-weight:700}.kpi .dlt{display:block;font-style:normal;font-size:12px;font-weight:800;margin-top:4px;color:var(--mut)}.kpi .dlt.up{color:var(--ok)}.kpi .dlt.dn{color:var(--bad)}
 .bars{display:grid;gap:8px}.bars .br{display:grid;grid-template-columns:minmax(0,180px) 1fr auto;gap:10px;align-items:center;font-size:14px}.bars .br span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:700}.bars .br i{display:block;height:12px;border-radius:9px;background:var(--or);min-width:4px}.bars .br em{font-style:normal;color:var(--mut);font-size:13px;white-space:nowrap}
 .tw{overflow-x:auto;border:1px solid var(--line);border-radius:14px;background:var(--card)}.tw table{border-collapse:collapse;width:100%;font-size:14px}.tw th,.tw td{padding:9px 11px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}.tw th:first-child,.tw td:first-child{text-align:left;position:sticky;left:0;background:var(--card);font-weight:700}
 .tw thead th{background:var(--soft);color:var(--ink);font-size:12px;text-transform:uppercase;letter-spacing:.3px}.tw tfoot td{font-weight:800;background:var(--soft)}.tw td.z{color:var(--mut);opacity:.5}.tw td.wrap{white-space:normal;min-width:200px}.tw.tl th,.tw.tl td{text-align:left}
@@ -179,7 +180,7 @@ nav button{font-weight:600}.kpi b{font-size:22px;font-weight:700}.tw table{font-
 <section id="tVenta" class="hide"><div class="wz"><div class="card" id="wz"></div></div></section>
 
 <section id="tDash" class="hide"><h2>📊 Dashboard de ventas</h2>
- <div class="filt" style="padding:10px 0 0"><select id="dMes" aria-label="Mes de cierre"></select><select id="dJefe" aria-label="Jefe de ventas"></select><select id="dVend" aria-label="Vendedor"></select><select id="dTipo" aria-label="Tipo"></select><button class="btn sec sm" id="dClr">✕ Limpiar</button></div>
+ <div class="filt" style="padding:10px 0 0"><select id="dMes" aria-label="Mes de cierre"></select><select id="dJefe" aria-label="Jefe de ventas"></select><select id="dVend" aria-label="Vendedor"></select><select id="dPro" aria-label="Proyecto"></select><select id="dTipo" aria-label="Tipo"></select><button class="btn sec sm" id="dClr">✕ Limpiar</button></div>
  <div id="dash"></div></section>
 
 <section id="tInt" class="hide"><h2>🔒 Reporte interno</h2>
@@ -308,9 +309,10 @@ const cuenta=(L=DATA)=>{const c={TODOS:L.length,OBSERVADO:0,SUBSANADO:0,PENDIENT
 /* filtros: mes de cierre (orden por fecha), jefe, vendedor */
 const uniq=a=>[...new Set(a.filter(Boolean))],alfa=a=>uniq(a).sort((x,y)=>x.localeCompare(y,'es'));
 const mesKey=m=>{const p=String(m).trim().toUpperCase().split(/\s+/),i=MESES.indexOf(p[0]);return i<0?1e9:(+p[1]||0)*12+i},porMes=a=>uniq(a).sort((x,y)=>mesKey(x)-mesKey(y));
-function opts(sel,vals,ph){const c=sel.value;sel.innerHTML=`<option value="">${ph}</option>`+vals.map(v=>`<option>${esc(v)}</option>`).join('');sel.value=vals.includes(c)?c:''}
+function opts(sel,vals,ph,deja){const c=sel.value,fuera=deja&&c&&!vals.includes(c);   // deja: si lo elegido no tiene ventas con los otros filtros, se mantiene (avisando) en vez de borrarse
+ sel.innerHTML=`<option value="">${ph}</option>`+(fuera?`<option value="${esc(c)}">${esc(c)} · sin ventas en este filtro</option>`:'')+vals.map(v=>`<option>${esc(v)}</option>`).join('');sel.value=vals.includes(c)||fuera?c:''}
 /* resumen de observaciones por área en la tarjeta (🔴 falta · 🟠 por verificar · ✅ conforme): mismos puntos que "Subsanar por punto" */
-let PT=null;
+let PT=null,NUMV={};
 function obsRes(x){if(!PT||!PT[x.id]||!['OBSERVADO','SUBSANADO'].includes(x.estado))return null;const d=PT[x.id],st={},r={};(d.st||[]).forEach(s=>st[pK(s[0],s[1])]=String(s[2]||'').toUpperCase());
  puntosDe(x,(d.it||[]).map(i=>({area:i[0],item:i[1],estado:'OBSERVADO'}))).forEach(p=>{const e=st[pK(p.area,p.punto)]||'PENDIENTE',a=r[p.area]=r[p.area]||{f:[],v:[],o:[]};(e==='CONFORME'?a.o:e==='POR VERIFICAR'?a.v:a.f).push(p.punto)});return r}
 const obsFaltan=x=>{const R=obsRes(x);return R?Object.values(R).reduce((t,q)=>t+q.f.length,0):0};
@@ -320,7 +322,7 @@ function obsHtml(x){const R=obsRes(x);if(!R)return '';const t=[],tt=[];['CIERRE'
   tt.push(a+': '+[...q.f.map(p=>'🔴 '+p),...q.v.map(p=>'🟠 '+p),...q.o.map(p=>'✅ '+p)].join(' · '))});
  return t.length?`<div class="oc" title="${esc(tt.join('\n'))}">${t.join('')}</div>`:''}
 document.addEventListener('contextmenu',e=>{const o=e.target.closest&&e.target.closest('.oc');if(o){e.preventDefault();toast(o.title.replace(/\n/g,' | '))}});
-function xcard(x){return `<div class="xc ${esc(x.estado)}" data-id="${esc(x.id)}"><div class="m"><b>${esc(x.cliente||'(sin cliente)')}</b><small class="un">${esc(x.proyecto)} · ${esc(x.unidad)}</small><small>${esc(x.vendedor)}${x.estado==='SUBSANADO'&&x.sub&&x.sub.area?' · 🟠 '+esc(x.sub.area):''}</small>${x.revisor?`<span class="rvb" title="Revisado por">🔍 ${esc(x.revisor)}</span>`:''}${x.anulado?'<span class="dup v">🚫 Anulado</span>':dupTags(x)}${obsHtml(x)}</div><span class="pill ${esc(x.estado)}">${EI[x.estado]||''} ${esc((x.estado||'').slice(0,4)==='OBSE'?'Obs.':x.estado==='SUBSANADO'?'Subsanado':x.estado==='PENDIENTE'?'Pend.':x.estado==='COMPLETO'?'OK':x.estado||'—')}</span></div>`}
+function xcard(x){return `<div class="xc ${esc(x.estado)}" data-id="${esc(x.id)}"><div class="m"><b>${esc(x.cliente||'(sin cliente)')}</b><small class="un">${esc(x.proyecto)} · ${esc(x.unidad)}</small><small>${esc(x.vendedor)}${x.estado==='SUBSANADO'&&x.sub&&x.sub.area?' · 🟠 '+esc(x.sub.area):''}</small>${NUMV[x.id]?`<span class="rvb" title="Número de venta del vendedor en este filtro">🧾 Venta ${NUMV[x.id]}</span>`:''}${x.revisor?`<span class="rvb" title="Revisado por">🔍 ${esc(x.revisor)}</span>`:''}${x.anulado?'<span class="dup v">🚫 Anulado</span>':dupTags(x)}${obsHtml(x)}</div><span class="pill ${esc(x.estado)}">${EI[x.estado]||''} ${esc((x.estado||'').slice(0,4)==='OBSE'?'Obs.':x.estado==='SUBSANADO'?'Subsanado':x.estado==='PENDIENTE'?'Pend.':x.estado==='COMPLETO'?'OK':x.estado||'—')}</span></div>`}
 function pintarInicio(){const c=cuenta(),pct=c.TODOS?Math.round(c.COMPLETO/c.TODOS*100):0,R=40,L=2*Math.PI*R,hoy=new Date().getHours(),sal=hoy<12?'Buenos días':hoy<19?'Buenas tardes':'Buenas noches';
  const pri=DATA.filter(x=>x.estado==='OBSERVADO').slice(0,3);
  $('#tInicio').innerHTML=`<div class="hero"><div class="ring"><svg width="96" height="96"><circle cx="48" cy="48" r="${R}" stroke="#ffffff30" stroke-width="10" fill="none"/><circle cx="48" cy="48" r="${R}" stroke="#4CC38A" stroke-width="10" fill="none" stroke-linecap="round" stroke-dasharray="${L}" stroke-dashoffset="${L*(1-pct/100)}"/></svg><b>${pct}%</b></div>
@@ -336,16 +338,24 @@ function pintarInicio(){const c=cuenta(),pct=c.TODOS?Math.round(c.COMPLETO/c.TOD
 $('#tInicio').onclick=e=>{const r=e.target.closest('.xc');if(r)abrir(r.dataset.id)};
 /* ---------- expedientes (lista / tablero estilo Pipedrive) ---------- */
 function pintarExp(){const fm=$('#fMes'),fj=$('#fJefe'),fv=$('#fVend'),fr=$('#fRev'),fp=$('#fPro'),fo=$('#fOrd');if(!fo.dataset.ok){fo.dataset.ok=1;fo.value=ls.get('mgOrd')||'pri'}opts(fp,alfa(DATA.map(x=>x.proyecto).filter(Boolean)),'🏗️ Proyecto: todos');fp.classList.toggle('hide',fp.options.length<3);
- opts(fm,porMes(DATA.map(x=>x.mes)),'📅 Mes de cierre: todos');opts(fj,alfa(DATA.map(x=>x.jefe)),'🧑‍💼 Jefe de ventas: todos');opts(fv,alfa(DATA.filter(x=>!fj.value||x.jefe===fj.value).map(x=>x.vendedor)),'👤 Vendedor: todos');opts(fr,alfa(DATA.map(x=>x.revisor).filter(Boolean)).concat(DATA.some(x=>!x.revisor)?['(Sin revisar)']:[]),'🔍 Revisado por: todos');fr.classList.toggle('hide',!DATA.some(x=>x.revisor));
+ opts(fm,porMes(DATA.map(x=>x.mes)),'📅 Mes de cierre: todos');const enMes=DATA.filter(x=>(!fm.value||x.mes===fm.value)&&(!fp.value||x.proyecto===fp.value));   // jefe y vendedor: solo quienes tienen ventas en el mes / proyecto elegido
+ opts(fj,alfa(enMes.map(x=>x.jefe)),'🧑‍💼 Jefe de ventas: todos',1);opts(fv,alfa(enMes.filter(x=>!fj.value||x.jefe===fj.value).map(x=>x.vendedor)),'👤 Vendedor: todos',1);opts(fr,alfa(DATA.map(x=>x.revisor).filter(Boolean)).concat(DATA.some(x=>!x.revisor)?['(Sin revisar)']:[]),'🔍 Revisado por: todos');fr.classList.toggle('hide',!DATA.some(x=>x.revisor));
  const nj=uniq(DATA.map(x=>x.jefe)).length,nv=uniq(DATA.map(x=>x.vendedor)).length;fm.classList.toggle('hide',fm.options.length<2);fj.classList.toggle('hide',nj<2);fv.classList.toggle('hide',nv<2);$('#fClr').classList.toggle('hide',fm.options.length<2&&nj<2&&nv<2);
  const B=(FIL==='ANU'?ANU:DATA).filter(x=>(!fp.value||x.proyecto===fp.value)&&(!fr.value||(fr.value==='(Sin revisar)'?!x.revisor:x.revisor===fr.value))&&(!fm.value||x.mes===fm.value)&&(!fj.value||x.jefe===fj.value)&&(!fv.value||x.vendedor===fv.value));
  const c=cuenta(B);$('#seg').innerHTML=[['OBSERVADO','🔴'],['SUBSANADO','🟠'],['PENDIENTE','🟡'],['COMPLETO','🟢'],['TODOS','Todos']].map(k=>`<button data-f="${k[0]}" class="${FIL===k[0]?'on':''}">${k[1]} ${c[k[0]]}</button>`).join('')+(B.some(esDup)?`<button data-f="DUP" class="${FIL==='DUP'?'on':''}">🧬 Duplicados ${B.filter(esDup).length}</button>`:'')+(ANU.length?`<button data-f="ANU" class="${FIL==='ANU'?'on':''}">🚫 Anulados ${ANU.length}</button>`:'');
  $('#bView').textContent=VIEW==='board'?'☰':'▦';const q=$('#q').value.trim().toLowerCase(),ORD={OBSERVADO:0,SUBSANADO:1,PENDIENTE:2,COMPLETO:3};
  let l=B.filter(x=>(FIL!=='DUP'||esDup(x))&&(!q||[x.id,x.cliente,x.proyecto,x.unidad,x.vendedor].join(' ').toLowerCase().includes(q)));const nId=x=>{const m=String(x.id).match(/(\d{4})\D+(\d+)\s*$/);return m?+m[1]*1e6+ +m[2]:0},az=k=>(a,b)=>String(a[k]||'~').localeCompare(String(b[k]||'~'),'es')||nId(b)-nId(a);l.sort({new:(a,b)=>nId(b)-nId(a),old:(a,b)=>nId(a)-nId(b),cli:az('cliente'),pro:az('proyecto'),ven:az('vendedor'),mes:(a,b)=>(mesKey(b.mes)-mesKey(a.mes))||nId(b)-nId(a)}[fo.value]||((a,b)=>(ORD[a.estado]??3)-(ORD[b.estado]??3)||nId(b)-nId(a)));
- if(!l.length){$('#lista').innerHTML='<div class="empty"><i>🎉</i>Nada por aquí</div>';return}
+ // resumen del vendedor (o del jefe) filtrado: cuántas ventas tiene en el mes y en qué estado están · cada tarjeta lleva "Venta 1 de N"
+ const quien=FIL!=='ANU'&&(fv.value||fj.value);NUMV={};
+ if(quien){[...B].sort((a,b)=>nId(a)-nId(b)).forEach((x,i)=>NUMV[x.id]=(i+1)+' de '+B.length)}
+ const RES=quien?(()=>{const n=B.length,ok=c.COMPLETO,pc=n?Math.round(ok/n*100):0,et=[['OBSERVADO','🔴','por corregir','var(--bad)'],['SUBSANADO','🟠','subsanado'+(c.SUBSANADO>1?'s':''),'var(--sub)'],['PENDIENTE','🟡','en revisión','var(--warn)']].filter(k=>c[k[0]]);
+  return `<div class="card vres"><div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:baseline"><b>${fv.value?'👤 '+esc(fv.value):'🧑‍💼 Equipo '+esc(fj.value)}</b><span class="mut">${fm.value?esc(cap(fm.value)):'Todos los meses'}${fp.value?' · '+esc(fp.value):''}</span></div>
+   <div class="vnum"><b>${ok}/${n}</b><span>venta${n===1?'':'s'} completa${n===1?'':'s'}${ok===n&&n?' 🎉':''}</span></div><div class="vbar"><i style="width:${pc}%"></i></div>
+   <div class="vch"><span style="color:var(--ok)">🟢 ${ok} completa${ok===1?'':'s'}</span>${et.map(k=>`<span style="color:${k[3]}">${k[1]} ${c[k[0]]} ${k[2]}</span>`).join('')}</div></div>`})():'';
+ if(!l.length){$('#lista').innerHTML=RES+'<div class="empty"><i>🎉</i>Nada por aquí</div>';return}
  if(VIEW==='board'){const cols=[['OBSERVADO','🔴 Por corregir'],['SUBSANADO','🟠 Subsanado · por verificar'],['PENDIENTE','🟡 En revisión'],['COMPLETO','🟢 Completos']];
-  $('#lista').innerHTML='<div class="board">'+cols.map(k=>{const a=l.filter(x=>x.estado===k[0]),no=k[0]==='OBSERVADO'?a.reduce((t,x)=>t+obsFaltan(x),0):0;return `<div class="col"><h3>${k[1]}<span>${no?`<span class="hdn" title="Observaciones por corregir en esta columna">${no} obs.</span>`:''}<span class="mut">${a.length}</span></span></h3>${a.slice(0,60).map(xcard).join('')||'<div class="empty" style="padding:12px">—</div>'}</div>`}).join('')+'</div>'}
- else{const a=l.filter(x=>FIL==='TODOS'||FIL==='DUP'||FIL==='ANU'||x.estado===FIL);$('#lista').innerHTML=a.length?a.slice(0,300).map(xcard).join(''):'<div class="empty"><i>🎉</i>Nada por aquí</div>'}}
+  $('#lista').innerHTML=RES+'<div class="board">'+cols.map(k=>{const a=l.filter(x=>x.estado===k[0]),no=k[0]==='OBSERVADO'?a.reduce((t,x)=>t+obsFaltan(x),0):0;return `<div class="col"><h3>${k[1]}<span>${no?`<span class="hdn" title="Observaciones por corregir en esta columna">${no} obs.</span>`:''}<span class="mut">${a.length}</span></span></h3>${a.slice(0,60).map(xcard).join('')||'<div class="empty" style="padding:12px">—</div>'}</div>`}).join('')+'</div>'}
+ else{const a=l.filter(x=>FIL==='TODOS'||FIL==='DUP'||FIL==='ANU'||x.estado===FIL);$('#lista').innerHTML=RES+(a.length?a.slice(0,300).map(xcard).join(''):'<div class="empty"><i>🎉</i>Nada por aquí</div>')}}
 $('#seg').onclick=e=>{const b=e.target.closest('button');if(b){FIL=b.dataset.f;if(VIEW==='board'&&FIL!=='TODOS'){}pintarExp()}};$('#q').oninput=pintarExp;
 ['#fMes','#fJefe','#fVend','#fRev','#fPro'].forEach(i=>$(i).onchange=pintarExp);$('#fOrd').onchange=()=>{ls.set('mgOrd',$('#fOrd').value);pintarExp()};$('#fClr').onclick=()=>{['#fMes','#fJefe','#fVend','#fRev','#fPro','#q'].forEach(i=>$(i).value='');pintarExp()};
 /* ---------- dashboard de ventas ---------- */
@@ -355,19 +365,26 @@ function agrupa(l,k){const m={};l.forEach(x=>{const g=x[k]||SD;m[g]=m[g]||{n:0,s
 function barras(l,k){const g=agrupa(l,k),mx=Math.max(1,...g.map(x=>x[1].n));return `<div class="bars">${g.map(([n,v])=>`<div class="br"><span title="${esc(n)}">${esc(n)}</span><i style="width:${v.n/mx*100}%"></i><em>${v.n} · ${sol(v.s)}</em></div>`).join('')}</div>`}
 function cruce(l,fk,ck,cols){const m={};l.forEach(x=>{const k=(x[fk]||SD)+'|'+(x[ck]||SD);m[k]=(m[k]||0)+1});const tot=c=>l.filter(x=>(x[ck]||SD)===c).length;
  return `<div class="tw"><table><thead><tr><th></th>${cols.map(c=>`<th>${esc(c)}</th>`).join('')}<th>Total</th></tr></thead><tbody>${alfa(l.map(x=>x[fk]||SD)).map(a=>{let s=0;const td=cols.map(c=>{const n=m[a+'|'+c]||0;s+=n;return `<td class="${n?'':'z'}">${n||'·'}</td>`}).join('');return `<tr><td>${esc(a)}</td>${td}<td><b>${s}</b></td></tr>`}).join('')}</tbody><tfoot><tr><td>Total</td>${cols.map(c=>`<td>${tot(c)}</td>`).join('')}<td>${l.length}</td></tr></tfoot></table></div>`}
-function pintarDash(){if(!VTA)return;const dm=$('#dMes'),dj=$('#dJefe'),dv=$('#dVend'),dt=$('#dTipo');
- opts(dm,porMes(VTA.map(x=>x.mes)),'📅 Mes de cierre: todos');opts(dj,alfa(VTA.map(x=>x.jefe)),'🧑‍💼 Jefe de ventas: todos');opts(dv,alfa(VTA.filter(x=>!dj.value||x.jefe===dj.value).map(x=>x.vendedor)),'👤 Vendedor: todos');opts(dt,alfa(VTA.map(x=>x.tipo)),'🏢 Tipo: todos');
- const l=VTA.filter(x=>(!dm.value||x.mes===dm.value)&&(!dj.value||x.jefe===dj.value)&&(!dv.value||x.vendedor===dv.value)&&(!dt.value||x.tipo===dt.value));
+function pintarDash(){if(!VTA)return;const dm=$('#dMes'),dj=$('#dJefe'),dv=$('#dVend'),dt=$('#dTipo'),dp=$('#dPro');
+ opts(dm,porMes(VTA.map(x=>x.mes)),'📅 Mes de cierre: todos');const enM=VTA.filter(x=>(!dm.value||x.mes===dm.value)&&(!dt.value||x.tipo===dt.value));   // jefe / vendedor / proyecto: solo los que tienen ventas en el mes elegido
+ opts(dj,alfa(enM.map(x=>x.jefe)),'🧑‍💼 Jefe de ventas: todos',1);opts(dv,alfa(enM.filter(x=>!dj.value||x.jefe===dj.value).map(x=>x.vendedor)),'👤 Vendedor: todos',1);opts(dp,alfa(enM.map(x=>x.proyecto).filter(Boolean)),'🏗️ Proyecto: todos',1);opts(dt,alfa(VTA.map(x=>x.tipo)),'🏢 Tipo: todos');
+ const fil=(L,mes)=>L.filter(x=>(mes===undefined?(!dm.value||x.mes===dm.value):x.mes===mes)&&(!dj.value||x.jefe===dj.value)&&(!dv.value||x.vendedor===dv.value)&&(!dp.value||x.proyecto===dp.value)&&(!dt.value||x.tipo===dt.value));
+ const l=fil(VTA);
  if(!l.length){$('#dash').innerHTML='<div class="empty"><i>📊</i>Sin ventas con estos filtros</div>';return}
  const s=l.reduce((a,x)=>a+(x.monto||0),0),meses=porMes(l.map(x=>x.mes||SD)),pro=alfa(l.map(x=>x.proyecto||SD));
- $('#dash').innerHTML=`<div class="kpi"><div><b>${l.length}</b><small>Ventas (cantidad)</small></div><div><b>${sol(s)}</b><small>Monto total</small></div><div><b>${uniq(l.map(x=>x.jefe)).length}</b><small>Jefes con ventas</small></div></div>
+ // comparación con el mes anterior (solo si se eligió un mes): misma combinación de filtros
+ const todosM=porMes(VTA.map(x=>x.mes)),ix=dm.value?todosM.indexOf(dm.value):-1,ant=ix>0?todosM[ix-1]:'';   // porMes ordena de antiguo a reciente
+ const la=ant?fil(VTA,ant):null,sa=la?la.reduce((a,x)=>a+(x.monto||0),0):0,dif=(a,b)=>{if(!la)return '';const d=a-b,p=b?Math.round(d/b*100):null;return `<em class="dlt ${d>0?'up':d<0?'dn':''}">${d>0?'▲':d<0?'▼':'='} ${p==null?'nuevo':Math.abs(p)+'%'} vs ${esc(cap(ant).slice(0,3))}</em>`};
+ $('#dash').innerHTML=`<div class="kpi"><div><b>${l.length}</b><small>Ventas (cantidad)</small>${dif(l.length,la?la.length:0)}</div><div><b>${sol(s)}</b><small>Monto total</small>${dif(s,sa)}</div><div><b>${sol(l.length?s/l.length:0)}</b><small>Ticket promedio</small></div><div><b>${uniq(l.map(x=>x.proyecto)).length} · ${uniq(l.map(x=>x.jefe)).length} · ${uniq(l.map(x=>x.vendedor)).length}</b><small>Proyectos · jefes · vendedores con ventas</small></div></div>
+ <div class="sec-t">🏗️ Ventas por proyecto</div><div class="card">${barras(l,'proyecto')}</div>
  <div class="sec-t">🧑‍💼 Ventas por jefe de ventas</div><div class="card">${barras(l,'jefe')}</div>
  <div class="sec-t">👤 Ventas por vendedor</div><div class="card">${barras(l,'vendedor')}</div>
+ <div class="sec-t">🗓️ Proyecto · por mes de cierre</div>${cruce(l,'proyecto','mes',meses)}
  <div class="sec-t">🗓️ Jefe de ventas · por mes de cierre</div>${cruce(l,'jefe','mes',meses)}
  <div class="sec-t">🗓️ Vendedor · por mes de cierre</div>${cruce(l,'vendedor','mes',meses)}
  <div class="sec-t">🏗️ Proyectos vendidos por cada jefe</div>${cruce(l,'jefe','proyecto',pro)}
  <div class="sec-t">🏗️ Proyectos vendidos por cada vendedor</div>${cruce(l,'vendedor','proyecto',pro)}`}
-['#dMes','#dJefe','#dVend','#dTipo'].forEach(i=>$(i).onchange=pintarDash);$('#dClr').onclick=()=>{['#dMes','#dJefe','#dVend','#dTipo'].forEach(i=>$(i).value='');pintarDash()};
+['#dMes','#dJefe','#dVend','#dPro','#dTipo'].forEach(i=>$(i).onchange=pintarDash);$('#dClr').onclick=()=>{['#dMes','#dJefe','#dVend','#dPro','#dTipo'].forEach(i=>$(i).value='');pintarDash()};
 /* ---------- reporte interno ---------- */
 async function cargarInt(){if(!INT)$('#intL').innerHTML='<div class="skel"></div><div class="skel"></div>';try{INT=(await call('reporteInterno',T)).filas;pintarInt()}catch(e){$('#intL').innerHTML='';toast(e.message,1)}}
 function filtInt(){const m=$('#iMes').value,p=$('#iPro').value,f=$('#iInf').value,q=$('#iq').value.trim().toLowerCase();return (INT||[]).filter(x=>(!m||x.mes===m)&&(!p||x.proyecto===p)&&(!f||(f==='con'?!!x.interno:!x.interno))&&(!q||(x.expediente+' '+x.cliente+' '+x.unidad).toLowerCase().includes(q)))}
