@@ -300,7 +300,8 @@ function comPrevisualizar(token, cierre) {
       pendiente: pen, total: com + n(x[7]) - n(x[8]) - n(x[9]), lineas: l, pagado: x[14] ? { fecha: x[14] instanceof Date ? Utilities.formatDate(x[14], 'America/Lima', 'dd/MM/yyyy') : txt_(x[14]), medio: txt_(x[15]), quien: txt_(x[16]) } : null };
   });
   const conBloque = {}; personas.forEach(x => { if (norm_(x.rol) === 'VENDEDOR') conBloque[norm_(x.nombre)] = 1; });
-  return { cierre: cierre, departamentos: c.depas.length, vendedores: Object.keys(c.porV).length, revisar: c.sinMod, libres: comVendedoresBM_().filter(v => !conBloque[norm_(v)]), yaGenerado: c.previos.length > 0,
+  let apr = null; try { if (c.previos.length) apr = comAprobacionDe_(cierre, comGenTotal_(cierre)); } catch (e) {}
+  return { cierre: cierre, aprobacion: apr, departamentos: c.depas.length, vendedores: Object.keys(c.porV).length, revisar: c.sinMod, libres: comVendedoresBM_().filter(v => !conBloque[norm_(v)]), yaGenerado: c.previos.length > 0,
     publicado: c.previos.some(r => norm_(r[12]) === 'SI'), total: personas.reduce((a, p) => a + p.total, 0), personas: personas, avisadas: comAvisadas_(cierre, c.porV),
     siguiente: c.sig, plazo: (typeof plazo_ === 'function' && plazo_(cierre, 'X')) ? fmtPlazo_(plazo_(cierre, 'X')) : '',
     // filtro: cuántas ventas del cierre se subsanaron dentro y fuera de fecha (una por expediente)
@@ -749,14 +750,15 @@ function comVendedoresBM_() {
 function comEscrituras(token, cierre) {
   const u = sesion_(token); puede_(u, 'accesos'); cierre = comCierreOk_(cierre);
   const v = comFilas_(comHojas_().d), hoy = comK_(cierre), pagadas = {}, cand = {};
-  v.forEach(r => { if (norm_(r[14]) === 'ESCRITURA') pagadas[String(r[13]).trim().replace(/^ESC-/, '')] = { cierre: mesNorm_(mesTxt_(r[0])), fecha: comFechaTxt_(r[8]), monto: Number(r[10]) || 0 }; });
+  const pagK = {};
+  v.forEach(r => { if (norm_(r[14]) === 'ESCRITURA') { const pg = { cierre: mesNorm_(mesTxt_(r[0])), fecha: comFechaTxt_(r[8]), monto: Number(r[10]) || 0 }; pagadas[String(r[13]).trim().replace(/^ESC-/, '')] = pg; pagK[comEscK_(r)] = pg; } });
   v.forEach(r => {
     const pend = Number(r[11]) || 0, id = String(r[13]).trim(), ci = mesNorm_(mesTxt_(r[0])), o = norm_(r[14]);
     if (pend <= 0 || !id || o === 'ESCRITURA' || o === 'VENDEDOR' || !/^[A-Z]+ \d{4}$/.test(ci) || comK_(ci) > hoy) return;
     if (cand[id] && cand[id].pend >= pend) return;
-    cand[id] = { id: id, cierre: ci, vendedor: txt_(r[2]), jefe: txt_(r[1]), dpto: txt_(r[3]), proyecto: txt_(r[5]), cliente: txt_(r[6]), minuta: comFechaTxt_(r[7]), fin: txt_(r[9]), pend: pend };
+    cand[id] = { id: id, cierre: ci, vendedor: txt_(r[2]), jefe: txt_(r[1]), dpto: txt_(r[3]), proyecto: txt_(r[5]), cliente: txt_(r[6]), minuta: comFechaTxt_(r[7]), fin: txt_(r[9]), pend: pend, k: comEscK_(r) };
   });
-  return Object.keys(cand).map(id => { const c = cand[id]; c.pagada = pagadas[id] || null; return c; })
+  return Object.keys(cand).map(id => { const c = cand[id]; c.pagada = pagadas[id] || pagK[c.k] || null; delete c.k; return c; })
     .filter(c => !c.pagada || c.pagada.cierre === cierre)
     .sort((a, b) => (a.pagada ? 1 : 0) - (b.pagada ? 1 : 0) || a.vendedor.localeCompare(b.vendedor, 'es') || comK_(a.cierre) - comK_(b.cierre));
 }
@@ -772,8 +774,11 @@ function comPagarEscritura(token, cierre, id, fecha, monto) {
     const v = comFilas_(h.d);
     const ya = v.find(r => norm_(r[14]) === 'ESCRITURA' && String(r[13]).trim() === 'ESC-' + id);
     if (ya) throw new Error('La escritura de esta venta ya se pagó en ' + mesNorm_(mesTxt_(ya[0])) + '.');
+    const base = v.find(r => String(r[13]).trim() === id && (Number(r[11]) || 0) > 0);
+    const yaM = base && v.find(r => norm_(r[14]) === 'ESCRITURA' && comEscK_(r) === comEscK_(base));
+    if (yaM) throw new Error('Esta unidad ya tiene una escritura registrada a mano en ' + mesNorm_(mesTxt_(yaM[0])) + '.');
     o = v.filter(r => String(r[13]).trim() === id && (Number(r[11]) || 0) > 0 && ['ESCRITURA', 'VENDEDOR'].indexOf(norm_(r[14])) < 0).sort((a, b) => (Number(b[11]) || 0) - (Number(a[11]) || 0))[0];
-    if (!o) throw new Error('No encontré el pendiente de ' + id + '. Si la venta es de antes del sistema, usa "Agregar concepto".');
+    if (!o) throw new Error('No encontré el pendiente de ' + id + '. Si la venta es de antes del sistema, usa "Registrar escritura a mano".');
     comNoPagado_(h, cierre, o[2]);
     const i = h.d.getLastRow() + 1; h.d.getRange(i, 1).setNumberFormat('@'); h.d.getRange(i, 4).setNumberFormat('@');
     h.d.getRange(i, 1, 1, COM_DET_HDR.length).setValues([fila_([cierre, o[1], o[2], o[3], o[4], o[5], o[6], o[7], f, o[9], monto, 0, 'FIRMA DE ESCRITURA', 'ESC-' + id, 'ESCRITURA', ''])]);
@@ -845,7 +850,8 @@ function comGerenciaDatos_(cierre) {
   return { cierres: gen, cierre: cierre, anterior: ant, totalAnterior: ant ? totDe(ant) : null, total: total, pagado: pagado, programado: total - pagado, pendiente: pendiente,
     depas: ven.reduce((a, p) => a + p.unidades, 0), vendido: vendido, ventas: bm.length, publicado: per.some(p => p.publicado), personas: per,
     grupos: Object.keys(gr).map(k => gr[k]).sort((a, b) => b.total - a.total), proyectos: Object.keys(pr).map(k => pr[k]).sort((a, b) => b.total - a.total), tendencia: tend,
-    alertas: { pasan: { n: pasan.length, monto: pasan.reduce((a, z) => a + n(z.r[6]) + n(z.r[7]), 0) }, escrituras: { n: esc.length, monto: esc.reduce((a, d) => a + n(d[10]), 0) }, observadas: obs } };
+    alertas: { pasan: { n: pasan.length, monto: pasan.reduce((a, z) => a + n(z.r[6]) + n(z.r[7]), 0) }, escrituras: { n: esc.length, monto: esc.reduce((a, d) => a + n(d[10]), 0) }, observadas: obs },
+    aprobacion: comAprobacionDe_(cierre, total), historialApr: comAprFilas_().filter(r => mesNorm_(mesTxt_(r[0])) === cierre).map(comAprObj_).reverse() };
 }
 function comGerencia(token, cierre) { const u = sesion_(token); comPuedeGer_(u); return comGerenciaDatos_(cierre); }
 /** Excel del cierre (formato CIERRE DE MES + hoja RESUMEN GERENCIA) para quien tiene "Comisiones: ver". */
@@ -863,6 +869,9 @@ function comHojaGerencia_(sh, G) {
   [[1, 20], [2, 210], [3, 190], [4, 70], [5, 150], [6, 110], [7, 90], [8, 90], [9, 90], [10, 110], [11, 110], [12, 130]].forEach(x => sh.setColumnWidth(x[0], x[1]));
   sh.setHiddenGridlines(true); sh.getRange('A:L').setFontFamily('Arial').setFontSize(10);
   sh.getRange(2, 2, 1, 11).merge().setValue('RESUMEN GERENCIA · COMISIONES ' + G.cierre).setBackground('#2F5597').setFontColor('#FFFFFF').setFontWeight('bold').setFontSize(12);
+  const A = G.aprobacion || {};
+  sh.getRange(3, 2, 1, 4).setValues([['APROBACIÓN GERENCIA', A.estado === 'APROBADO' ? '✅ APROBADO' : A.estado === 'OBSERVADO' ? '⚠️ OBSERVADO' : A.estado === 'CAMBIO' ? '🔁 CAMBIÓ DESPUÉS DE APROBAR' : '⏳ PENDIENTE', A.quien || '', A.fecha || '']]).setFontWeight('bold')
+    .setBackground(A.estado === 'APROBADO' ? C.okBg : A.estado ? C.malBg : C.aviso);
   sh.getRange(4, 2, 1, 7).setValues([['TOTAL CIERRE', 'PAGADO', 'PROGRAMADO', 'PENDIENTE ESCRITURA', 'MONTO VENDIDO', '% COSTO', 'DEPAS']]).setBackground(C.naranja).setFontWeight('bold');
   sh.getRange(5, 2, 1, 7).setValues([[G.total, G.pagado, G.programado, G.pendiente, G.vendido, pct, G.depas]]).setFontWeight('bold');
   sh.getRange(5, 2, 1, 5).setNumberFormat(COM_SOL); sh.getRange(5, 7).setNumberFormat('0.00%');
@@ -877,4 +886,73 @@ function comHojaGerencia_(sh, G) {
   f++;
   sh.getRange(f, 2, 1, 3).setValues([['PROYECTO', 'VENTAS', 'COMISIONES S/']]).setBackground(C.naranja).setFontWeight('bold'); f++;
   if (G.proyectos.length) { sh.getRange(f, 2, G.proyectos.length, 3).setValues(G.proyectos.map(p => [p.proyecto, p.lineas, p.total])); sh.getRange(f, 4, G.proyectos.length, 1).setNumberFormat(COM_SOL); }
+}
+/* ---------- ✅ APROBACIÓN DE GERENCIA GENERAL · 🖋️ ESCRITURA A MANO · 🔔 AVISOS PARA ADMINISTRACIÓN ----------
+ * COMISIONES_APROBACION: una fila por decisión (historial). Vale la última del cierre; si el total cambia después, se pide de nuevo. */
+const HOJA_COM_APR = 'COMISIONES_APROBACION';
+const COM_APR_HDR = ['Cierre', 'Decisión', 'Total S/', 'Aprobó (Gerencia)', 'Fecha', 'Comentario', 'Registró'];
+try {
+  ['comAprobar', 'comEscrituraManual', 'comAvisos'].forEach(f => { if (API_PUBLICA.indexOf(f) < 0) API_PUBLICA.push(f); });
+  if (SOLO_LECTURA.indexOf('comAvisos') < 0) SOLO_LECTURA.push('comAvisos');
+} catch (e) {}
+const comEscK_ = r => norm_(r[2]) + '|' + norm_(r[5]) + '|' + norm_(r[3]);   // vendedor | proyecto | dpto
+function comAprFilas_() { const h = ss_().getSheetByName(HOJA_COM_APR); return h && h.getLastRow() > 1 ? h.getRange(2, 1, h.getLastRow() - 1, COM_APR_HDR.length).getValues() : []; }
+function comAprObj_(r) { return { decision: norm_(r[1]), total: Number(r[2]) || 0, quien: txt_(r[3]), fecha: r[4] instanceof Date ? Utilities.formatDate(r[4], 'America/Lima', 'dd/MM/yyyy') : txt_(r[4]), comentario: txt_(r[5]), registro: txt_(r[6]) }; }
+/** Total del cierre generado (comisión + bono − adelanto − dscto de todas las personas). */
+function comGenTotal_(cierre) { return comFilas_(comHojas_().r).filter(r => mesNorm_(mesTxt_(r[0])) === cierre).reduce((a, r) => a + (Number(r[6]) || 0) + (Number(r[7]) || 0) - (Number(r[8]) || 0) - (Number(r[9]) || 0), 0); }
+/** Estado de la aprobación: PENDIENTE · APROBADO · OBSERVADO · CAMBIO (aprobado, pero el total cambió después). */
+function comAprobacionDe_(cierre, totalActual) {
+  const l = comAprFilas_().filter(r => mesNorm_(mesTxt_(r[0])) === cierre); if (!l.length) return { estado: 'PENDIENTE' };
+  const a = comAprObj_(l[l.length - 1]);
+  a.estado = a.decision === 'APROBADO' ? (Math.abs(a.total - (Number(totalActual) || 0)) > 0.5 ? 'CAMBIO' : 'APROBADO') : 'OBSERVADO';
+  a.totalActual = Number(totalActual) || 0; return a;
+}
+/** Administración registra que Gerencia General aprobó u observó las comisiones de un cierre ya generado (Gerencia solo lo ve). */
+function comAprobar(token, cierre, decision, comentario, aprobo, fecha) {
+  const u = sesion_(token); puede_(u, 'accesos'); cierre = comCierreOk_(cierre);
+  decision = decision === 'OBSERVADO' ? 'OBSERVADO' : 'APROBADO'; comentario = String(comentario || '').trim().slice(0, 500);
+  aprobo = String(aprobo || '').trim().toUpperCase().slice(0, 80) || 'GERENCIA GENERAL';
+  const fm = String(fecha || '').match(/^(\d{4})-(\d{2})-(\d{2})$/), fd = fm ? new Date(+fm[1], +fm[2] - 1, +fm[3]) : new Date();
+  if (fd > new Date(Date.now() + 864e5)) throw new Error('La fecha no puede ser futura.');
+  if (decision === 'OBSERVADO' && comentario.length < 3) throw new Error('Escribe qué observó Gerencia.');
+  const total = comGenTotal_(cierre);
+  if (!comFilas_(comHojas_().r).some(r => mesNorm_(mesTxt_(r[0])) === cierre)) throw new Error('El cierre ' + cierre + ' aún no está generado.');
+  const ss = ss_(); let h = ss.getSheetByName(HOJA_COM_APR);
+  if (!h) { h = ss.insertSheet(HOJA_COM_APR); h.getRange(1, 1, 1, COM_APR_HDR.length).setValues([COM_APR_HDR]).setFontWeight('bold').setBackground('#0C1A3D').setFontColor('#FFFFFF'); h.setFrozenRows(1); h.getRange('A:A').setNumberFormat('@'); h.getRange('C:C').setNumberFormat('#,##0.00'); h.getRange('E:E').setNumberFormat('dd/mm/yyyy'); h.setColumnWidth(6, 360); }
+  const lock = LockService.getScriptLock(); lock.waitLock(20000);
+  try { h.getRange(h.getLastRow() + 1, 1, 1, COM_APR_HDR.length).setValues([fila_([cierre, decision, total, aprobo, fd, comentario, u.nombre])]); } finally { lock.releaseLock(); }
+  log_(u.nombre, decision === 'APROBADO' ? 'COMISIONES_APROBADAS' : 'COMISIONES_OBSERVADAS_GERENCIA', cierre + ' · ' + aprobo + ' · S/ ' + total.toFixed(2) + (comentario ? ' · ' + comentario : ''));
+  return comAprobacionDe_(cierre, total);
+}
+/** Escritura (2do pago) registrada a mano: ventas de antes del sistema o que no están en la lista de pendientes. */
+function comEscrituraManual(token, cierre, d) {
+  const u = sesion_(token); puede_(u, 'accesos'); cierre = comCierreOk_(cierre); d = d || {};
+  const vendedor = String(d.vendedor || '').trim(), proyecto = String(d.proyecto || '').trim().toUpperCase(), dpto = String(d.dpto || '').trim().toUpperCase(), cliente = String(d.cliente || '').trim(), monto = Number(d.monto);
+  if (!vendedor) throw new Error('Elige el vendedor.'); if (!proyecto || !dpto) throw new Error('Escribe el proyecto y el dpto.'); if (isNaN(monto) || monto <= 0) throw new Error('Escribe el monto a pagar.');
+  const m = String(d.fecha || '').match(/^(\d{4})-(\d{2})-(\d{2})$/); if (!m) throw new Error('Pon la fecha de la escritura.');
+  const f = new Date(+m[1], +m[2] - 1, +m[3]); if (f > new Date(Date.now() + 864e5)) throw new Error('La fecha de escritura no puede ser futura.');
+  const bm = ss_().getSheetByName(HOJA_BM).getRange(PRIMERA_FILA, 1, ULTIMA_FILA - PRIMERA_FILA + 1, 24).getValues().filter(r => norm_(r[22]) === norm_(vendedor));
+  const ult = bm[bm.length - 1], nombre = ult ? String(ult[22]).trim() : vendedor.toUpperCase(), jefe = ult ? String(ult[23] || '').trim() : '';
+  const venta = bm.find(r => norm_(r[4]) === norm_(proyecto) && norm_(r[6]) === norm_(dpto));
+  const h = comHojas_(), k = norm_(nombre) + '|' + norm_(proyecto) + '|' + norm_(dpto), lock = LockService.getScriptLock(); lock.waitLock(20000);
+  let cid = '';
+  try {
+    const v = comFilas_(h.d), ya = v.find(r => norm_(r[14]) === 'ESCRITURA' && comEscK_(r) === k);
+    if (ya) throw new Error('La escritura de ' + proyecto + ' ' + dpto + ' (' + nombre + ') ya se registró en ' + mesNorm_(mesTxt_(ya[0])) + '.');
+    comNoPagado_(h, cierre, nombre);
+    cid = 'ESC-MAN-' + Date.now();
+    const i = h.d.getLastRow() + 1; h.d.getRange(i, 1).setNumberFormat('@'); h.d.getRange(i, 4).setNumberFormat('@');
+    h.d.getRange(i, 1, 1, COM_DET_HDR.length).setValues([fila_([cierre, jefe, nombre, dpto, '', proyecto, cliente || (venta ? txt_(venta[7]) : ''), venta && venta[16] instanceof Date ? venta[16] : '', f, venta ? txt_(venta[19]) : '', monto, 0, 'FIRMA DE ESCRITURA', cid, 'ESCRITURA', ''])]);
+    h.d.getRange(i, 8, 1, 2).setNumberFormat('dd/mm/yyyy');
+  } finally { lock.releaseLock(); }
+  log_(u.nombre, 'COMISION_ESCRITURA_MANUAL', cierre + ' · ' + nombre + ' · ' + proyecto + ' ' + dpto + ' · ' + monto);
+  return { id: cid, vendedor: nombre };
+}
+/** 🔔 Para administración: escrituras pendientes y cierres generados sin aprobación vigente de Gerencia. */
+function comAvisos(token) {
+  const u = sesion_(token); puede_(u, 'accesos');
+  const gen = [...new Set(comFilas_(comHojas_().r).map(r => mesNorm_(mesTxt_(r[0]))).filter(c => /^[A-Z]+ \d{4}$/.test(c)))].sort((a, b) => comK_(b) - comK_(a));
+  let esc = []; try { if (gen.length) esc = comEscrituras(token, gen[0]).filter(x => !x.pagada).map(x => ({ vendedor: x.vendedor, proyecto: x.proyecto, dpto: x.dpto, pend: x.pend })); } catch (e) {}
+  const apr = gen.slice(0, 3).map(c => Object.assign({ cierre: c }, comAprobacionDe_(c, comGenTotal_(c)))).filter(a => a.estado !== 'APROBADO');
+  return { cierre: gen[0] || '', escrituras: esc, aprobacion: apr };
 }
