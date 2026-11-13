@@ -159,11 +159,11 @@ function comPagar(token, cierre, personas, fecha, medio, quitar, evidencia) {
   const u = sesion_(token); puede_(u, 'accesos'); cierre = comCierreOk_(cierre);
   const h = comHojas_(), ks = (personas || []).map(p => norm_(p.rol) + '|' + norm_(p.nombre)); if (!ks.length) throw new Error('Elige a quién marcar.');
   if (!quitar) {   // evidencia obligatoria (voucher): se guarda en Drive + copia de respaldo + registro en COMISIONES_EVIDENCIAS
-    if (!evidencia || !evidencia.b64) throw new Error('Adjunta la evidencia del pago (PDF o imagen).');
+    const evs = comEvLista_(evidencia); if (!evs.length) throw new Error('Adjunta la evidencia del pago (PDF o imagen).');
     const rs = comFilas_(h.r).filter(r => mesNorm_(mesTxt_(r[0])) === cierre && ks.indexOf(norm_(r[1]) + '|' + norm_(r[2])) >= 0);
     if (!rs.length) throw new Error('Primero genera las comisiones de ' + cierre + ' (confirma la vista previa).');
-    const tot = rs.reduce((a, r) => a + (Number(r[6]) || 0) + (Number(r[7]) || 0) - (Number(r[8]) || 0) - (Number(r[9]) || 0), 0);
-    comGuardarEvidencia_(cierre, 'PAGO', personas.length === 1 ? norm_(personas[0].rol) + ' · ' + String(personas[0].nombre).trim().toUpperCase() : 'GRUPO (' + personas.length + ') · ' + personas.map(p => String(p.nombre).trim().toUpperCase()).join(', ').slice(0, 300), tot, ks, evidencia, u);
+    const tot = rs.reduce((a, r) => a + (Number(r[6]) || 0) + (Number(r[7]) || 0) - (Number(r[8]) || 0) - (Number(r[9]) || 0), 0), lote = '#' + Date.now();
+    evs.forEach(ev => comGuardarEvidencia_(cierre, 'PAGO', personas.length === 1 ? norm_(personas[0].rol) + ' · ' + String(personas[0].nombre).trim().toUpperCase() : 'GRUPO (' + personas.length + ') · ' + personas.map(p => String(p.nombre).trim().toUpperCase()).join(', ').slice(0, 300), tot, ks.concat([lote]), ev, u));
   }
   let f = null; if (!quitar) { const m = String(fecha || '').match(/^(\d{4})-(\d{2})-(\d{2})$/); f = m ? new Date(+m[1], +m[2] - 1, +m[3]) : new Date(); }
   let n = 0;
@@ -308,7 +308,7 @@ function comPrevisualizar(token, cierre) {
   });
   const conBloque = {}; personas.forEach(x => { if (norm_(x.rol) === 'VENDEDOR') conBloque[norm_(x.nombre)] = 1; });
   let apr = null; try { if (c.previos.length) apr = comAprobacionDe_(cierre, comGenTotal_(cierre)); } catch (e) {}
-  try { const ev = comEviMapa_(cierre); personas.forEach(x => { const e = ev.pago[norm_(x.rol) + '|' + norm_(x.nombre)]; if (e && x.pagado) x.evidencia = e; }); if (apr && ev.aprobacion) apr.evidencia = ev.aprobacion; } catch (e) {}
+  try { const ev = comEviMapa_(cierre); personas.forEach(x => { const k = norm_(x.rol) + '|' + norm_(x.nombre), e = ev.pago[k]; if (e && e.length && x.pagado) { x.evidencias = e; x.evidencia = e[0]; } if (ev.firma[k]) x.firma = ev.firma[k]; }); if (apr && ev.aprobacion.length) { apr.evidencia = ev.aprobacion[0]; apr.evidencias = ev.aprobacion; } } catch (e) {}
   return { cierre: cierre, aprobacion: apr, departamentos: c.depas.length, vendedores: Object.keys(c.porV).length, revisar: c.sinMod, libres: comVendedoresBM_().filter(v => !conBloque[norm_(v)]), yaGenerado: c.previos.length > 0,
     publicado: c.previos.some(r => norm_(r[12]) === 'SI'), total: personas.reduce((a, p) => a + p.total, 0), personas: personas, avisadas: comAvisadas_(cierre, c.porV),
     siguiente: c.sig, plazo: (typeof plazo_ === 'function' && plazo_(cierre, 'X')) ? fmtPlazo_(plazo_(cierre, 'X')) : '',
@@ -863,7 +863,7 @@ function comGerenciaDatos_(cierre) {
 }
 function comGerencia(token, cierre) {
   const u = sesion_(token); comPuedeGer_(u); const G = comGerenciaDatos_(cierre);
-  try { if (G.cierre) { const ev = comEviMapa_(G.cierre); G.personas.forEach(x => { const e = ev.pago[x.rol + '|' + norm_(x.nombre)]; if (e && x.pagado) x.evidencia = e; }); if (G.aprobacion && ev.aprobacion && G.aprobacion.estado !== 'PENDIENTE') G.aprobacion.evidencia = ev.aprobacion; } } catch (e) {}
+  try { if (G.cierre) { const ev = comEviMapa_(G.cierre); G.personas.forEach(x => { const k = x.rol + '|' + norm_(x.nombre), e = ev.pago[k]; if (e && e.length && x.pagado) { x.evidencias = e; x.evidencia = e[0]; } if (ev.firma[k]) x.firma = ev.firma[k]; }); G.firmadas = G.personas.filter(x => x.firma).length; if (G.aprobacion && ev.aprobacion.length && G.aprobacion.estado !== 'PENDIENTE') { G.aprobacion.evidencia = ev.aprobacion[0]; G.aprobacion.evidencias = ev.aprobacion; } } } catch (e) {}
   return G;
 }
 /** Excel del cierre (formato CIERRE DE MES + hoja RESUMEN GERENCIA) para quien tiene "Comisiones: ver". */
@@ -927,10 +927,11 @@ function comAprobar(token, cierre, decision, comentario, aprobo, fecha, evidenci
   const fm = String(fecha || '').match(/^(\d{4})-(\d{2})-(\d{2})$/), fd = fm ? new Date(+fm[1], +fm[2] - 1, +fm[3]) : new Date();
   if (fd > new Date(Date.now() + 864e5)) throw new Error('La fecha no puede ser futura.');
   if (decision === 'OBSERVADO' && comentario.length < 3) throw new Error('Escribe qué observó Gerencia.');
-  if (decision === 'APROBADO' && (!evidencia || !evidencia.b64)) throw new Error('Adjunta la evidencia de la aprobación (correo en PDF, captura o documento).');
+  const evs = comEvLista_(evidencia);
+  if (decision === 'APROBADO' && !evs.length) throw new Error('Adjunta la evidencia de la aprobación (correo en PDF, captura o documento).');
   const total = comGenTotal_(cierre);
   if (!comFilas_(comHojas_().r).some(r => mesNorm_(mesTxt_(r[0])) === cierre)) throw new Error('El cierre ' + cierre + ' aún no está generado.');
-  if (evidencia && evidencia.b64) comGuardarEvidencia_(cierre, decision === 'APROBADO' ? 'APROBACION' : 'OBSERVACION', 'GERENCIA GENERAL · ' + aprobo, total, ['APROBACION'], evidencia, u);
+  const loteA = '#' + Date.now(); evs.forEach(ev => comGuardarEvidencia_(cierre, decision === 'APROBADO' ? 'APROBACION' : 'OBSERVACION', 'GERENCIA GENERAL · ' + aprobo, total, ['APROBACION', loteA], ev, u));
   const ss = ss_(); let h = ss.getSheetByName(HOJA_COM_APR);
   if (!h) { h = ss.insertSheet(HOJA_COM_APR); h.getRange(1, 1, 1, COM_APR_HDR.length).setValues([COM_APR_HDR]).setFontWeight('bold').setBackground('#0C1A3D').setFontColor('#FFFFFF'); h.setFrozenRows(1); h.getRange('A:A').setNumberFormat('@'); h.getRange('C:C').setNumberFormat('#,##0.00'); h.getRange('E:E').setNumberFormat('dd/mm/yyyy'); h.setColumnWidth(6, 360); }
   const lock = LockService.getScriptLock(); lock.waitLock(20000);
@@ -968,7 +969,8 @@ function comAvisos(token) {
   const gen = [...new Set(comFilas_(comHojas_().r).map(r => mesNorm_(mesTxt_(r[0]))).filter(c => /^[A-Z]+ \d{4}$/.test(c)))].sort((a, b) => comK_(b) - comK_(a));
   let esc = []; try { if (gen.length) esc = comEscrituras(token, gen[0]).filter(x => !x.pagada).map(x => ({ vendedor: x.vendedor, proyecto: x.proyecto, dpto: x.dpto, pend: x.pend })); } catch (e) {}
   const apr = gen.slice(0, 3).map(c => Object.assign({ cierre: c }, comAprobacionDe_(c, comGenTotal_(c)))).filter(a => a.estado !== 'APROBADO');
-  return { cierre: gen[0] || '', escrituras: esc, aprobacion: apr };
+  let sinFirma = []; try { if (gen.length) { const ev = comEviMapa_(gen[0]); sinFirma = comFilas_(comHojas_().r).filter(r => mesNorm_(mesTxt_(r[0])) === gen[0] && r[14] && !ev.firma[norm_(r[1]) + '|' + norm_(r[2])]).map(r => txt_(r[2])); } } catch (e) {}
+  return { cierre: gen[0] || '', escrituras: esc, aprobacion: apr, sinFirma: sinFirma };
 }
 /* ---------- 📎 EVIDENCIAS (voucher de pago / aprobación de Gerencia) ----------
  * El archivo se guarda en Drive: COMISIONES - MG › EVIDENCIAS › <cierre>, con copia en COMISIONES - MG › RESPALDO › <cierre>.
@@ -997,15 +999,41 @@ function comGuardarEvidencia_(cierre, tipo, etiqueta, monto, claves, ev, u) {
   log_(u.nombre, 'COMISION_EVIDENCIA', cierre + ' · ' + tipo + ' · ' + etiqueta + ' · ' + nombre);
   return { id: file.getId(), url: file.getUrl(), nombre: nombre };
 }
-/** Última evidencia de pago por persona ('ROL|NOMBRE') y última de aprobación del cierre. */
+/** Evidencias vigentes del cierre. Cada envío es un "lote" (#…): vale el último lote por persona.
+ *  pago['ROL|NOMBRE'] = [archivos] · aprobacion = [archivos] · firma['ROL|NOMBRE'] = {quien, fecha, archivos} (FIRMA ANULADA la quita). */
 function comEviMapa_(cierre) {
-  const h = ss_().getSheetByName(HOJA_COM_EVI), o = { pago: {}, aprobacion: null }; if (!h || h.getLastRow() < 2) return o;
-  h.getRange(2, 1, h.getLastRow() - 1, COM_EVI_HDR.length).getValues().forEach(r => {
-    if (mesNorm_(mesTxt_(r[0])) !== cierre) return; const e = { id: txt_(r[6]), nombre: txt_(r[4]) }, t = norm_(r[1]);
-    if (t === 'PAGO') String(r[10] || '').split(';').forEach(k => { if (k) o.pago[norm_(k)] = e; });
-    else if (t === 'APROBACION') o.aprobacion = e;
+  const h = ss_().getSheetByName(HOJA_COM_EVI), o = { pago: {}, aprobacion: [], firma: {} }; if (!h || h.getLastRow() < 2) return o;
+  const lotP = {}, lotF = {}; let lotA = '';
+  h.getRange(2, 1, h.getLastRow() - 1, COM_EVI_HDR.length).getValues().forEach((r, i) => {
+    if (mesNorm_(mesTxt_(r[0])) !== cierre) return;
+    const t = norm_(r[1]), cl = String(r[10] || '').split(';').filter(Boolean), lote = (cl.find(k => k.charAt(0) === '#') || '#f' + i), ks = cl.filter(k => k.charAt(0) !== '#').map(norm_), e = { id: txt_(r[6]), nombre: txt_(r[4]) };
+    if (t === 'PAGO') ks.forEach(k => { if (lotP[k] !== lote) { lotP[k] = lote; o.pago[k] = []; } o.pago[k].push(e); });
+    else if (t === 'APROBACION') { if (lotA !== lote) { lotA = lote; o.aprobacion = []; } o.aprobacion.push(e); }
+    else if (t === 'FIRMA') { const m = String(r[2]).match(/firmó (.+) (\d{2}\/\d{2}\/\d{4})$/); ks.forEach(k => { if (lotF[k] !== lote) { lotF[k] = lote; o.firma[k] = { quien: m ? m[1] : '', fecha: m ? m[2] : '', archivos: [] }; } o.firma[k].archivos.push(e); }); }
+    else if (t === 'FIRMA ANULADA') ks.forEach(k => { delete o.firma[k]; delete lotF[k]; });
   });
   return o;
+}
+/** Acepta un archivo {nombre, mime, b64} o una lista de ellos (máx. 6). */
+const comEvLista_ = ev => (Array.isArray(ev) ? ev : ev ? [ev] : []).filter(x => x && x.b64).slice(0, 6);
+try { ['comFirmar', 'comQuitarFirma'].forEach(f => { if (API_PUBLICA.indexOf(f) < 0) API_PUBLICA.push(f); }); } catch (e) {}
+/** ✍️ Liquidación firmada por Gerencia (por persona): se guardan los archivos (foto / PDF) y queda la marca en el cuadro. */
+function comFirmar(token, cierre, rol, nombre, firmo, fecha, archivos) {
+  const u = sesion_(token); puede_(u, 'accesos'); cierre = comCierreOk_(cierre); rol = norm_(rol);
+  const x = comLiqFilas_(cierre, rol, nombre), evs = comEvLista_(archivos); if (!evs.length) throw new Error('Adjunta la liquidación firmada (foto o PDF).');
+  firmo = String(firmo || '').trim().toUpperCase().slice(0, 80) || 'GERENCIA GENERAL';
+  const m = String(fecha || '').match(/^(\d{4})-(\d{2})-(\d{2})$/), fd = m ? new Date(+m[1], +m[2] - 1, +m[3]) : new Date(); if (fd > new Date(Date.now() + 864e5)) throw new Error('La fecha de firma no puede ser futura.');
+  const n = v => Number(v) || 0, tot = n(x.R[6]) + n(x.R[7]) - n(x.R[8]) - n(x.R[9]), quien = txt_(x.R[2]).toUpperCase(), lote = '#' + Date.now();
+  const etq = rol + ' · ' + quien + ' · firmó ' + firmo + ' ' + Utilities.formatDate(fd, 'America/Lima', 'dd/MM/yyyy');
+  evs.forEach(ev => comGuardarEvidencia_(cierre, 'FIRMA', etq, tot, [rol + '|' + quien, lote], ev, u));
+  return { ok: true };
+}
+/** Quita la marca de firma (los archivos no se borran: queda una fila FIRMA ANULADA en el historial). */
+function comQuitarFirma(token, cierre, rol, nombre) {
+  const u = sesion_(token); puede_(u, 'accesos'); cierre = comCierreOk_(cierre); rol = norm_(rol); const quien = String(nombre || '').trim().toUpperCase(), h = comHojaEvi_();
+  h.getRange(h.getLastRow() + 1, 1, 1, COM_EVI_HDR.length).setValues([fila_([cierre, 'FIRMA ANULADA', rol + ' · ' + quien, '', '', '', '', '', u.nombre, new Date(), rol + '|' + quien])]);
+  log_(u.nombre, 'COMISION_FIRMA_QUITADA', cierre + ' · ' + rol + ' ' + quien);
+  return { ok: true };
 }
 /** Abre una evidencia registrada (administración o "Comisiones: ver"). Si el original se borró, usa la copia de respaldo. */
 function comEvidenciaVer(token, id) {
