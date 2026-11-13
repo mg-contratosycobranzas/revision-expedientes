@@ -1,6 +1,6 @@
 {
-  "version": "2026.11.13-2",
-  "notas": "Evidencia obligatoria de pago y de aprobacion (Drive + respaldo) y filtro por persona",
+  "version": "2026.11.13-3",
+  "notas": "Liquidacion por persona en PDF y Excel",
   "archivos": [
     "Ruta",
     "Comisiones",
@@ -12,12 +12,12 @@
   ],
   "sha256": {
     "Ruta": "da3a8e6a0cb2692ea12031e285aee5c4fc8447f8fa5d0b684dbe44d333df8ec6",
-    "Comisiones": "4c143ca44b378720b1f2987d485a560f219abe8112851ceb59e2f7a3c7daed7b",
+    "Comisiones": "fe6fce330a3ccac59732e88f3219d863e848a7ca5c3def5941417ac548f79cbe",
     "Ayuda": "0f3a579cd0f522a678c9b16e0e61ea44b2683da551b5e964e7b2d6000c73c467",
     "Seguimiento": "fa95c9c531a5ad4bce253a381eb167694009a42a1e90cb423b028e085cd8f199",
     "Puntos": "e70c16f36010ad60077bcbac04fd3ab51bdf9b90764b0db394ade0d80723ff8e",
     "Bloqueo": "d80b7cf346df67cea2646a1d6451752916fa44ee6672eb5c02a673c2ac54735d",
     "Tiempos": "d44e5a406e8a9ddc0ff208b1a31b9e402d58f67ea86a2f6f6a434ad8a2c2a9ae"
   },
-  "firma": "2aaa35c7ea92aa0aeb6a00747cc698c1d16ccd8a343480ce39c482c11b804d9a"
+  "firma": "e2647940ba0e08066e9768b38ffa28af5f5893fdb88ac25f15685fdec18acd15"
 }

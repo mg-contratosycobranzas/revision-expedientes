@@ -1018,3 +1018,46 @@ function comEvidenciaVer(token, id) {
   const b = f.getBlob();
   return { nombre: f.getName(), tipo: b.getContentType(), b64: Utilities.base64Encode(b.getBytes()) };
 }
+/* ---------- 📄 LIQUIDACIÓN POR PERSONA (PDF para firmar y Excel) ----------
+ * Lee el cierre ya generado (COMISIONES_RESUMEN + COMISIONES_DETALLE). El Excel usa el mismo bloque del formato CIERRE DE MES. */
+try { ['comLiquidacion', 'comLiquidacionExcel'].forEach(f => { if (API_PUBLICA.indexOf(f) < 0) API_PUBLICA.push(f); }); if (SOLO_LECTURA.indexOf('comLiquidacion') < 0) SOLO_LECTURA.push('comLiquidacion'); } catch (e) {}
+function comLiqFilas_(cierre, rol, nombre) {
+  const h = comHojas_(), R = comFilas_(h.r).find(r => mesNorm_(mesTxt_(r[0])) === cierre && norm_(r[1]) === rol && norm_(r[2]) === norm_(nombre));
+  if (!R) throw new Error('Primero genera el cuadro de ' + cierre + ' ("Confirmar y generar el cuadro").');
+  const det = rol === 'VENDEDOR' ? comFilas_(h.d).filter(d => mesNorm_(mesTxt_(d[0])) === cierre && norm_(d[2]) === norm_(nombre) && norm_(d[14]) !== 'VENDEDOR') : [];
+  return { R: R, det: det };
+}
+function comLiquidacion(token, cierre, rol, nombre) {
+  const u = sesion_(token); comPuedeGer_(u); cierre = comCierreOk_(cierre); rol = norm_(rol);
+  const x = comLiqFilas_(cierre, rol, nombre), R = x.R, n = v => Number(v) || 0, fd = d => d instanceof Date ? Utilities.formatDate(d, 'America/Lima', 'dd/MM/yyyy') : txt_(d);
+  let conf = null; try { const hc = ss_().getSheetByName(HOJA_COM_CONF); if (hc) { const c = comConfFila_(hc, cierre, rol, txt_(R[2])); if (c) conf = comConfObj_(c.r); } } catch (e) {}
+  return { cierre: cierre, rol: rol, nombre: txt_(R[2]), jefe: txt_(R[3]), unidades: n(R[4]), tramo: txt_(R[5]), comision: n(R[6]), bono: n(R[7]), adelanto: n(R[8]), dscto: n(R[9]),
+    total: n(R[6]) + n(R[7]) - n(R[8]) - n(R[9]), pendiente: n(R[11]), pagado: R[14] ? { fecha: fd(R[14]), medio: txt_(R[15]) } : null, confirmo: conf && conf.confirmado ? conf.confirmo + ' · ' + String(conf.fConf || '').slice(0, 10) : '',
+    lineas: x.det.map(d => ({ dpto: txt_(d[3]), est: txt_(d[4]), proyecto: txt_(d[5]), cliente: txt_(d[6]), minuta: fd(d[7]), escritura: fd(d[8]), fin: txt_(d[9]), monto: n(d[10]), pendiente: n(d[11]), concepto: txt_(d[12]), origen: norm_(d[14]) })) };
+}
+/** Excel de la liquidación de una persona: una pestaña con su bloque (igual al formato CIERRE DE MES) y líneas de firma. */
+function comLiquidacionExcel(token, cierre, rol, nombre) {
+  const u = sesion_(token); comPuedeGer_(u); cierre = comCierreOk_(cierre); rol = norm_(rol);
+  const x = comLiqFilas_(cierre, rol, nombre), quien = txt_(x.R[2]).toUpperCase(), titulo = 'LIQUIDACIÓN - ' + quien + ' - ' + cierre;
+  const pr = PropertiesService.getScriptProperties(), clave = 'COM_LIQ_' + (cierre + '_' + rol + '_' + quien).replace(/[^A-Z0-9]+/g, '_').slice(0, 80);
+  const lock = LockService.getScriptLock(); lock.waitLock(30000);
+  let libro;
+  try {
+    SpreadsheetApp.flush();
+    try { const id = pr.getProperty(clave); if (id) libro = SpreadsheetApp.openById(id); } catch (e) { libro = null; }
+    if (!libro) { libro = SpreadsheetApp.create(titulo); pr.setProperty(clave, libro.getId()); try { DriveApp.getFileById(libro.getId()).moveTo(comCarpeta_(CARPETA_COM)); } catch (e) {} }
+    const tmp = libro.insertSheet('_tmp_' + Date.now()); libro.getSheets().forEach(s => { if (s.getSheetId() !== tmp.getSheetId()) libro.deleteSheet(s); });
+    const sh = libro.insertSheet(quien.slice(0, 90), 0); comAnchos_(sh);
+    sh.getRange(1, 2).setValue('LIQUIDACIÓN DE COMISIONES · ' + cierre).setFontWeight('bold').setFontSize(12);
+    let f = 2;
+    if (rol === 'VENDEDOR') f = comBloqueVendedor_(sh, f, x.R, x.det, cierre);
+    else { const f0 = f; f = comBloqueJefe_(sh, f, x.R, cierre); if (rol === 'GERENTE') sh.getRange(f0, 3).setValue('GERENTE COMERCIAL · ' + quien); }
+    f += 2;
+    sh.getRange(f, 2, 1, 11).setValues([['', '______________________', '', '', '', '______________________', '', '', '______________________', '', '']]).setHorizontalAlignment('center');
+    sh.getRange(f + 1, 2, 1, 11).setValues([['', 'Vendedor: ' + quien, '', '', '', 'Contratos y Cobranzas', '', '', 'Gerencia General', '', '']]).setHorizontalAlignment('center').setFontWeight('bold');
+    libro.deleteSheet(tmp); if (libro.getName() !== titulo) libro.rename(titulo);
+    SpreadsheetApp.flush();
+  } finally { lock.releaseLock(); }
+  log_(u.nombre, 'COMISION_LIQUIDACION_EXCEL', cierre + ' · ' + rol + ' ' + quien);
+  return { nombre: libro.getName(), archivo: comDescarga_(libro, 'xlsx', libro.getName()) };
+}
