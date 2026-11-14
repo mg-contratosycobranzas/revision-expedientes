@@ -167,6 +167,7 @@ nav button{font-weight:600}.kpi b{font-size:22px;font-weight:700}.tw table{font-
 <div id="vLogin"><button class="ib btn sec" id="bTh0" aria-label="Día / noche">☀</button>
 <div class="card login"><div class="ph">🏢</div><div class="lg" style="font-size:30px;line-height:1.1">Cuadro de <b>Revisiones</b></div><p class="mut" style="margin:6px 0 0">Expedientes de venta y observaciones</p>
 <input id="cod" maxlength="12" autocomplete="off" autocapitalize="characters" placeholder="CÓDIGO" aria-label="Código"><button class="btn big" id="bIn">Entrar →</button>
+<label style="display:flex;gap:8px;align-items:center;justify-content:center;margin:12px 0 0;font-size:14px;cursor:pointer"><input type="checkbox" id="rec" style="width:20px;height:20px;margin:0;flex:none"> Recordar mi código en este equipo</label><div id="recU" class="mut hide" style="font-size:13px;margin-top:6px"></div>
 <p class="mut hint">¿Sin código? Pídelo a Contratos y Cobranzas 💬</p></div><p class="foot">Diseñado por el área de <b>Contratos y Cobranzas</b></p></div>
 
 <div id="app" class="hide">
@@ -234,8 +235,14 @@ const guardar=r=>{try{sessionStorage.setItem('mgS',JSON.stringify(r))}catch(e){}
 const ini=n=>(n||'?').split(' ').filter(Boolean).slice(0,2).map(x=>x[0]).join('').toUpperCase();
 const EI={OBSERVADO:'🔴',SUBSANADO:'🟠',PENDIENTE:'🟡',COMPLETO:'🟢',APROBADO:'🟢'};
 /* ---------- login ---------- */
-async function entrar(cod){const b=$('#bIn');busy(b,1,'⏳ Entrando…');try{const r=await call('login',cod||$('#cod').value);T=r.token;U=r.user;guardar(r);arrancar()}catch(e){toast(e.message,1);vib([40,40,40])}busy(b,0)}
-function salir(auto){if(T&&auto!==true)call('salirSesion',T).catch(()=>{});T=null;U=null;VTA=null;INT=null;DATA=[];clearInterval(TM);try{sessionStorage.removeItem('mgS');sessionStorage.removeItem('mgAdm')}catch(e){}const cb=$('#como');if(cb)cb.remove();if(auto)toast(auto==='inactividad'?'🔒 Sesión cerrada por 30 min de inactividad':'Sesión vencida · entra de nuevo',1);$('#app').classList.add('hide');$('#vLogin').classList.remove('hide');$('#mod').classList.remove('on')}
+async function entrar(cod){const b=$('#bIn');busy(b,1,'⏳ Entrando…');try{const c=String(cod||$('#cod').value).trim(),r=await call('login',c);T=r.token;U=r.user;guardar(r);recordar(c,!cod);arrancar()}catch(e){toast(e.message,1);vib([40,40,40])}busy(b,0)}
+/* 🔑 recordar el código en este equipo (opcional; en una PC compartida no conviene marcarlo) */
+function recordar(c,form){try{if($('#rec')&&$('#rec').checked)localStorage.setItem('mgRec',JSON.stringify({c,n:U.nombre}));else if(form)localStorage.removeItem('mgRec')}catch(e){}}
+function recPinta(){let r=null;try{r=JSON.parse(localStorage.getItem('mgRec')||'null')}catch(e){}const u=$('#recU');if(!u)return null;
+ if(!r||!r.c){u.classList.add('hide');return null}$('#cod').value=r.c;$('#rec').checked=true;u.classList.remove('hide');
+ u.innerHTML=`👋 Código guardado de <b>${esc(r.n||'')}</b> · <button class="btn sec sm" id="recX" style="padding:2px 8px">¿No eres tú? Olvidar</button>`;
+ $('#recX').onclick=()=>{try{localStorage.removeItem('mgRec')}catch(e){}$('#cod').value='';$('#rec').checked=false;u.classList.add('hide');$('#cod').focus()};return r}
+function salir(auto){if(auto!==true&&!auto)try{sessionStorage.setItem('mgOut','1')}catch(e){}setTimeout(recPinta,0);if(T&&auto!==true)call('salirSesion',T).catch(()=>{});T=null;U=null;VTA=null;INT=null;DATA=[];clearInterval(TM);try{sessionStorage.removeItem('mgS');sessionStorage.removeItem('mgAdm')}catch(e){}const cb=$('#como');if(cb)cb.remove();if(auto)toast(auto==='inactividad'?'🔒 Sesión cerrada por 30 min de inactividad':'Sesión vencida · entra de nuevo',1);$('#app').classList.add('hide');$('#vLogin').classList.remove('hide');$('#mod').classList.remove('on')}
 // Seguridad: si nadie usa el portal por 30 minutos (PC compartida), la sesión se cierra sola
 let ACT=Date.now();['click','keydown','touchstart','scroll'].forEach(ev=>addEventListener(ev,()=>ACT=Date.now(),{passive:true}));
 setInterval(()=>{if(T&&Date.now()-ACT>30*60e3)salir('inactividad')},60e3);
@@ -1339,5 +1346,6 @@ addEventListener('beforeinstallprompt',e=>{e.preventDefault();window._pwa={promp
 if('serviceWorker' in navigator&&/^https?:/.test(location.protocol))navigator.serviceWorker.register('sw.js').catch(()=>{});
 /* ---------- inicio ---------- */
 (function(){const h=location.hash.replace('#','').trim();if(h){history.replaceState(null,'',location.pathname+location.search);$('#cod').value=h;entrar(h);return}
- try{const s=JSON.parse(sessionStorage.getItem('mgS')||'null');if(s){T=s.token;U=s.user;arrancar();barraComo()}}catch(e){}})();
+ try{const s=JSON.parse(sessionStorage.getItem('mgS')||'null');if(s){T=s.token;U=s.user;arrancar();barraComo();return}}catch(e){}
+ const r=recPinta();let out=null;try{out=sessionStorage.getItem('mgOut')}catch(e){}if(r&&!out)entrar(r.c)})();
 </script></body></html>
