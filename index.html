@@ -295,7 +295,9 @@ function scFaltan(F){const el=$('#scF');if(!el||!F)return;let n=0;
 const sinCerrar=x=>x.estado==='PENDIENTE'&&String(x.sbs||'').toUpperCase()==='APROBADO'&&String(x.ctr||'').toUpperCase()==='APROBADO';
 let HABP=[],HABT=0,COMAV=null,COMAVT=0;   // 🙋 pedidos de habilitación (Bloqueo.gs) y 🔔 avisos de comisiones: se refrescan como máximo cada minuto
 const nAvisos=()=>miPend().length+HABP.length+(can('revisar')?DATA.filter(sinCerrar).length:0)+(COMAV?COMAV.escrituras.length+COMAV.aprobacion.length+(COMAV.sinFirma||[]).length:0);
-function campana(){const b=$('#bBell');if(!U||SALES.includes(U.rol)||!can('ver')){b.classList.add('hide');return}b.classList.remove('hide');const pinta=()=>{const n=nAvisos();$('#bellN').textContent=n;$('#bellN').classList.toggle('hide',!n)};pinta();
+function campana(){const b=$('#bBell');if(!U||!can('ver')){b.classList.add('hide');return}
+ if(SALES.includes(U.rol)){b.classList.remove('hide');if(DATA.length)novedades();const pc=()=>{const n=misAv().urg;$('#bellN').textContent=n;$('#bellN').classList.toggle('hide',!n)};pc();cargaCOMP(()=>{pc();if(!$('#tInicio').classList.contains('hide'))pintarInicio()});return}
+ b.classList.remove('hide');b.classList.remove('hide');const pinta=()=>{const n=nAvisos();$('#bellN').textContent=n;$('#bellN').classList.toggle('hide',!n)};pinta();
  if(can('revisar')&&Date.now()-HABT>60000){HABT=Date.now();call('habPendientes',T).then(l=>{HABP=l||[];pinta()}).catch(()=>{})}
  if(can('accesos')&&Date.now()-COMAVT>60000){COMAVT=Date.now();call('comAvisos',T).then(r=>{COMAV=r;pinta()}).catch(()=>{COMAV=null})}}
 function verCampana(todas){const m=$('#mod'),s=$('#sheet'),area=U.area&&U.area!=='TODO',l=todas||!area?DATA.filter(x=>x.estado==='SUBSANADO'):miPend();m.classList.add('on');
@@ -308,7 +310,74 @@ function verCampana(todas){const m=$('#mod'),s=$('#sheet'),area=U.area&&U.area!=
   return h+(HABP.length?`<div class="sec-t">🙋 Piden habilitación · ${HABP.length}</div>${HABP.map(p=>`<div class="chk xc" data-id="${esc(p.id)}" style="cursor:pointer"><span><b>${esc(p.cliente)}</b> · ${esc(p.id)}<br><small class="mut">${esc(p.pidio)} · ${esc(p.fecha)} · “${esc(p.motivo)}”</small></span></div>`).join('')}`:'')+(h||HABP.length?'<div class="sec-t">🟠 Subsanados por revisar</div>':'')})()}
  ${area?`<p><button class="btn sec sm" id="bcT">${todas?'Solo mi área':'Ver todas las áreas'}</button></p>`:''}<div id="bcL" style="margin-top:10px">${l.length?l.map(xcard).join(''):'<div class="empty"><i>🎉</i>Nada pendiente de revisión</div>'}</div>`;
  $('#bcX').onclick=()=>m.classList.remove('on');if($('#bcT'))$('#bcT').onclick=()=>verCampana(!todas);$$('#sheet .xc[data-id]').filter(r=>!r.closest('#bcL')).forEach(r=>r.onclick=()=>abrir(r.dataset.id));$$('#sheet [data-bcom]').forEach(b=>b.onclick=async()=>{await comisionesUI(b.dataset.bcom);comPreviaUI(b.dataset.bcom)});$('#bcL').onclick=e=>{const r=e.target.closest('.xc');if(r)abrir(r.dataset.id)}}
-$('#bBell').onclick=()=>verCampana(false);
+/* ---------- 🔔 Mis avisos (Comercial) y ☀️ Mi día (Contratos y Cobranzas): se calculan en el portal con lo que ya entrega el motor ---------- */
+let NOV=null,COMP=null,COMPT=0;
+const avK=()=>'mgAv_'+norm2(U&&(U.ref||U.nombre)),norm2=t=>String(t||'').trim().toUpperCase();
+/* novedades: compara el estado de cada expediente con el que tenía la última vez que se abrió el portal en este equipo */
+function novedades(){let s={};try{s=JSON.parse(localStorage.getItem(avK())||'{}')}catch(e){}
+ const snap=s.snap||null,nov=s.nov||[],f=new Date().toLocaleString('es-PE',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}),nuevo={};
+ DATA.forEach(x=>{nuevo[x.id]=x.estado;if(!snap||snap[x.id]===x.estado)return;const de=snap[x.id]||'';
+  const t=x.estado==='OBSERVADO'?(de==='SUBSANADO'?'VUELVE':'OBS'):x.estado==='COMPLETO'?'OK':null;if(!t)return;
+  const i=nov.findIndex(n=>n.id===x.id);if(i>=0)nov.splice(i,1);nov.unshift({id:x.id,t,f,leido:false})});
+ NOV=nov.filter(n=>DATA.some(x=>x.id===n.id)).slice(0,30);try{localStorage.setItem(avK(),JSON.stringify({snap:nuevo,nov:NOV}))}catch(e){}}
+function leerNov(){if(!NOV)return;NOV.forEach(n=>n.leido=true);let s={};try{s=JSON.parse(localStorage.getItem(avK())||'{}');s.nov=NOV;localStorage.setItem(avK(),JSON.stringify(s))}catch(e){}}
+/* comisiones publicadas que esperan la conformidad de la persona (como máximo una consulta cada 10 minutos) */
+function cargaCOMP(pinta){if(Date.now()-COMPT<600e3)return;COMPT=Date.now();
+ call('comVisible',T).then(v=>v&&v.ver?Promise.all([call('misComisiones',T),call('misConformidad',T)]):null).then(r=>{if(!r||!r[1]){COMP=[];pinta();return}const [l,cf]=r;
+  COMP=(l||[]).filter(c=>{const f=cf[c.cierre+'|'+c.rol];return f&&f.confirmado&&!f.conformidad}).map(c=>({cierre:c.cierre,rol:c.rol,total:c.total}));pinta()}).catch(()=>{COMP=[]})}
+function misAv(){const ah=new Date(),r={venc:[],pronto:[],obs:[],nov:(NOV||[]).filter(n=>!n.leido),com:COMP||[]};
+ DATA.filter(x=>x.estado==='OBSERVADO').forEach(x=>{const L=CAL.length?limite(x.mes,'X'):null,o={x,L};(L&&L<ah?r.venc:L&&L-ah<48*3600e3?r.pronto:r.obs).push(o)});
+ r.urg=r.venc.length+r.pronto.length+r.nov.length+r.com.length;return r}
+const pendDe=x=>{const o=obsRes(x);if(!o)return '';let f=0,v=0;Object.values(o).forEach(a=>{f+=a.f.length;v+=a.v.length});return f||v?` · ${f?'🔴 '+f+' por subsanar':''}${f&&v?' · ':''}${v?'🕓 '+v+' en revisión':''}`:''};
+function verMisAvisos(){const m=$('#mod'),s=$('#sheet'),A=misAv(),X=id=>DATA.find(x=>x.id===id)||{id,cliente:''};m.classList.add('on');
+ const fila=(x,extra,col)=>`<div class="chk" data-av="${esc(x.id)}" style="cursor:pointer${col?';border-left:4px solid '+col:''}"><span style="flex:1"><b>${esc(x.cliente)}</b> · ${esc(x.id)}<br><small class="mut">${extra}</small></span><span>›</span></div>`;
+ const NT={OBS:['🔴','Te observaron este expediente'],VUELVE:['↩️','Contratos revisó tu subsanación y algo sigue observado'],OK:['🎉','¡Aprobado! Pasó a completo']};
+ let h='';
+ if(A.nov.length)h+=`<div class="sec-t">🆕 Novedades · ${A.nov.length}</div>`+A.nov.map(n=>fila(X(n.id),NT[n.t][0]+' '+NT[n.t][1]+' · '+esc(n.f),n.t==='OK'?'var(--ok)':'var(--bad)')).join('');
+ if(A.venc.length)h+=`<div class="sec-t">⚠️ Plazo vencido · ${A.venc.length}</div><p class="mut hint" style="margin:0 0 6px">Entra al expediente y pide habilitación a Contratos y Cobranzas.</p>`+A.venc.map(o=>fila(o.x,'Venció el '+esc(fPlazo(o.L))+pendDe(o.x),'var(--bad)')).join('');
+ if(A.pronto.length)h+=`<div class="sec-t">⏰ Vence pronto · ${A.pronto.length}</div>`+A.pronto.map(o=>fila(o.x,'Hasta el '+esc(fPlazo(o.L))+' · '+faltan(o.L)+pendDe(o.x),'var(--warn)')).join('');
+ if(A.obs.length)h+=`<div class="sec-t">🔴 Por subsanar · ${A.obs.length}</div>`+A.obs.map(o=>fila(o.x,(o.L?'Plazo: '+esc(fPlazo(o.L))+' · '+faltan(o.L):'Cierre '+esc(cap(o.x.mes)))+pendDe(o.x))).join('');
+ if(A.com.length)h+=`<div class="sec-t">💰 Tu comisión espera tu conformidad</div>`+A.com.map(c=>`<div class="chk" data-avc="1" style="cursor:pointer;border-left:4px solid var(--warn)"><span style="flex:1"><b>${esc(cap(c.cierre))}</b> · ${esc(cap(c.rol))}<br><small class="mut">Contratos y Cobranzas ya la confirmó: revisa y dinos si estás conforme</small></span><span>›</span></div>`).join('');
+ s.innerHTML=`<div style="display:flex;justify-content:space-between;gap:8px"><div><h2>🔔 Mis avisos</h2><div class="mut">${A.urg?A.urg+' por atender':'Todo al día'}</div></div><button class="ib" style="background:var(--soft);color:var(--ink);border:0" id="avX" aria-label="Cerrar">✕</button></div>${h||'<div class="empty"><i>🎉</i>No tienes avisos pendientes</div>'}`;
+ leerNov();campana();
+ $('#avX').onclick=()=>m.classList.remove('on');s.onclick=e=>{const r=e.target.closest('[data-av]');if(r){abrir(r.dataset.av);return}if(e.target.closest('[data-avc]')){m.classList.remove('on');ir('tAyuda');setTimeout(()=>{const c=$('#ayMis');if(c)c.scrollIntoView({behavior:'smooth'})},120)}}}
+/* ☀️ Mi día: todo lo que espera a Contratos y Cobranzas, ordenado por urgencia */
+const ptsVer=()=>PT?DATA.filter(x=>PT[x.id]&&(PT[x.id].st||[]).some(s=>String(s[2]).toUpperCase()==='POR VERIFICAR')):[];
+function avCard(){if(!U||!SALES.includes(U.rol))return '';if(NOV===null&&DATA.length)novedades();const A=misAv();if(!A.urg)return '';
+ return `<div class="card" id="avC" style="margin:12px 0;padding:12px 14px;cursor:pointer;border-left:4px solid var(--warn)" onclick="verMisAvisos()"><b>🔔 Tienes ${A.urg} aviso${A.urg>1?'s':''}</b><div class="mut" style="font-size:13px">${[A.nov.length&&A.nov.length+' novedad'+(A.nov.length>1?'es':''),A.venc.length&&'⚠️ '+A.venc.length+' con plazo vencido',A.pronto.length&&'⏰ '+A.pronto.length+' vence'+(A.pronto.length>1?'n':'')+' pronto',A.com.length&&'💰 comisión por confirmar'].filter(Boolean).join(' · ')}</div></div>`}
+function diaCard(){if(!U||SALES.includes(U.rol)||!can('revisar'))return '';const ah=new Date(),ob=DATA.filter(x=>x.estado==='OBSERVADO').map(x=>({x,L:CAL.length?limite(x.mes,'X'):null}));
+ const pv=ptsVer(),sp=miPend().filter(x=>!pv.includes(x)),A=COMAV,nc=A?A.escrituras.length+A.aprobacion.length+(A.sinFirma||[]).length:0,
+  ven=ob.filter(o=>o.L&&o.L<ah),pr=ob.filter(o=>o.L&&o.L>=ah&&o.L-ah<48*3600e3),sc=DATA.filter(sinCerrar);
+ const it=[[pv.length,'🧩','Puntos por verificar','marca ✅ conforme o ↩️ sigue observado','pv'],[sp.length,'🟠','Subsanados por revisar','sin puntos marcados: revisa el expediente','bell'],[HABP.length,'🙋','Piden habilitación','Comercial espera tu respuesta','bell'],
+  [nc,'💼','Comisiones','aprobaciones, firmas y escrituras','bell'],[sc.length,'🟢','Aprobados sin cerrar','revisa CONTROL DE REVISIONES','bell'],
+  [pr.length,'⏰','Vencen en 48 h','Comercial aún no subsana','pr'],[ven.length,'⚠️','Plazo vencido','observados sin subsanar','ven']].filter(i=>i[0]);
+ return `<div class="card" style="margin:12px 0;padding:12px 14px"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b>☀️ Mi día</b><small class="mut">${it.length?it.reduce((a,i)=>a+i[0],0)+' por atender':'🎉 Nada pendiente'}</small></div>
+  ${it.map(i=>`<div class="chk" data-dia="${i[4]}" style="cursor:pointer"><span style="font-size:20px">${i[1]}</span><span style="flex:1"><b>${i[0]} · ${i[2]}</b><br><small class="mut">${i[3]}</small></span><span>›</span></div>`).join('')}</div>`}
+function verDia(k){const m=$('#mod'),s=$('#sheet'),ah=new Date();if(k==='bell'){verCampana(false);return}
+ const ob=DATA.filter(x=>x.estado==='OBSERVADO').map(x=>({x,L:CAL.length?limite(x.mes,'X'):null}));
+ const l=k==='pv'?ptsVer().map(x=>({x})):k==='pr'?ob.filter(o=>o.L&&o.L>=ah&&o.L-ah<48*3600e3):ob.filter(o=>o.L&&o.L<ah);
+ const T2={pv:'🧩 Puntos por verificar',pr:'⏰ Vencen en 48 h',ven:'⚠️ Plazo vencido sin subsanar'}[k];m.classList.add('on');
+ s.innerHTML=`<div style="display:flex;justify-content:space-between;gap:8px"><div><h2>${T2}</h2><div class="mut">${l.length} expediente${l.length===1?'':'s'}</div></div><button class="ib" style="background:var(--soft);color:var(--ink);border:0" id="dX" aria-label="Cerrar">✕</button></div>
+ ${l.map(o=>`<div class="chk"><span style="flex:1"><b>${esc(o.x.cliente)}</b> · ${esc(o.x.id)}<br><small class="mut">${esc(cap(o.x.vendedor||''))}${o.L?' · '+(o.L<ah?'venció el ':'hasta el ')+esc(fPlazo(o.L)):''}${o.x.sub&&o.x.sub.quien&&k==='pv'?' · subsanó '+esc(o.x.sub.quien):''}</small></span>${k==='pv'?`<button class="btn ok sm" data-rp="${esc(o.x.id)}">Revisar aquí</button>`:''}<button class="btn sec sm" data-ab="${esc(o.x.id)}">Abrir</button></div>`).join('')||'<div class="empty"><i>🎉</i>Nada aquí</div>'}`;
+ $('#dX').onclick=()=>m.classList.remove('on');$$('#sheet [data-ab]').forEach(b=>b.onclick=()=>abrir(b.dataset.ab));$$('#sheet [data-rp]').forEach(b=>b.onclick=()=>revPuntos(b.dataset.rp))}
+/* revisión rápida de los puntos que Comercial marcó como subsanados, sin abrir todo el expediente */
+async function revPuntos(id){const m=$('#mod'),s=$('#sheet'),x=DATA.find(z=>z.id===id)||{id,cliente:''};m.classList.add('on');s.innerHTML='<div class="skel"></div>';
+ let P;try{P=(await call('puntosEstado',T,id)).filter(p=>p.estado==='POR VERIFICAR')}catch(e){toast(e.message,1);m.classList.remove('on');return}
+ const D={};s.innerHTML=`<div style="display:flex;justify-content:space-between;gap:8px"><div><h2>🧩 ${esc(x.cliente)}</h2><div class="mut">${esc(id)} · ${P.length} punto${P.length===1?'':'s'} por verificar</div></div><button class="ib" style="background:var(--soft);color:var(--ink);border:0" id="rX" aria-label="Cerrar">✕</button></div>
+ ${P.map((p,i)=>`<div class="card" style="margin:8px 0;padding:10px 12px"><b>${esc(p.area)} · ${esc(p.punto)}</b><div class="mut" style="font-size:13px">✍️ ${esc(p.subsano||'—')}${p.fechaSub?' · '+esc(p.fechaSub):''}${p.comentario?'<br>“'+esc(p.comentario)+'”':''}</div>
+  <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"><button class="btn sec sm" data-d="${i}" data-v="CONFORME">✅ Conforme</button><button class="btn sec sm" data-d="${i}" data-v="OBSERVADO">↩️ Sigue observado</button></div>
+  <input class="hide" data-dc="${i}" placeholder="¿Qué falta? (lo verá Comercial)" style="margin-top:6px"></div>`).join('')||'<div class="empty"><i>🎉</i>No quedan puntos por verificar</div>'}
+ ${P.length?'<p><button class="btn ok big" id="rOk" disabled>💾 Guardar revisión</button></p><p><button class="btn sec big" id="rAb">📂 Abrir el expediente completo</button></p>':''}`;
+ $('#rX').onclick=()=>m.classList.remove('on');if($('#rAb'))$('#rAb').onclick=()=>abrir(id);
+ $$('#sheet [data-d]').forEach(b=>b.onclick=()=>{const i=b.dataset.d;D[i]=b.dataset.v;$$(`#sheet [data-d="${i}"]`).forEach(z=>{z.classList.toggle('ok',z===b&&z.dataset.v==='CONFORME');z.classList.toggle('red',z===b&&z.dataset.v==='OBSERVADO');z.classList.toggle('sec',z!==b)});
+  $(`#sheet [data-dc="${i}"]`).classList.toggle('hide',D[i]!=='OBSERVADO');$('#rOk').disabled=!Object.keys(D).length});
+ if($('#rOk'))$('#rOk').onclick=async()=>{const b=$('#rOk'),l=Object.keys(D).map(i=>({area:P[i].area,punto:P[i].punto,estado:D[i],coment:($(`#sheet [data-dc="${i}"]`).value||'').trim()}));
+  if(l.some(v=>v.estado==='OBSERVADO'&&v.coment.length<3)){toast('Escribe qué falta en los puntos que siguen observados',1);return}
+  busy(b,1,'⏳ Guardando…');try{const r=await call('puntosVerificar',T,id,l,'');vib([30,40,30]);toast('✅ '+r.conformes.length+' conforme'+(r.conformes.length===1?'':'s')+(r.observados.length?' · ↩️ '+r.observados.length+' devuelto'+(r.observados.length>1?'s':'')+' a Comercial':''));
+   if(PT&&PT[id])l.forEach(v=>{const q=PT[id].st.find(z=>pK(z[0],z[1])===pK(v.area,v.punto));if(q)q[2]=v.estado==='CONFORME'?'CONFORME':'PENDIENTE'});cargar(true);
+   const sig=ptsVer().find(z=>z.id!==id);if(sig&&confirm('¿Pasar al siguiente expediente con puntos por verificar?\n'+sig.cliente))revPuntos(sig.id);else verDia('pv')}catch(e){toast(e.message,1);busy(b,0)}}}
+document.addEventListener('click',e=>{const b=e.target.closest('#tInicio [data-dia]');if(b)verDia(b.dataset.dia)});
+$('#bBell').onclick=()=>SALES.includes(U.rol)?verMisAvisos():verCampana(false);
 /* ---------- calendario comercial (hoja CALENDARIO): etapas del cierre y plazos ---------- */
 const ECOL={E:'#DA7839',S:'#E2A72E',X:'#E2A72E',R:'#3B6FD8',P:'#3B6FD8',V:'#3B6FD8',G:'#7B4FD0',F:'#D6453A'},EQUIEN={E:'Comercial',S:'Comercial',X:'Comercial',R:'Contratos',P:'Contratos',V:'Contratos',G:'Gerencia',F:'Feriado'};
 const cap=s=>String(s||'').charAt(0)+String(s||'').slice(1).toLowerCase(),normMes=s=>String(s||'').trim().toUpperCase().replace('SETIEMBRE','SEPTIEMBRE'),hoyISO=()=>iso(new Date());
@@ -351,6 +420,7 @@ function pintarInicio(){const c=cuenta(),pct=c.TODOS?Math.round(c.COMPLETO/c.TOD
  $('#tInicio').innerHTML=`<div class="hero"><div class="ring"><svg width="96" height="96"><circle cx="48" cy="48" r="${R}" stroke="#ffffff30" stroke-width="10" fill="none"/><circle cx="48" cy="48" r="${R}" stroke="#4CC38A" stroke-width="10" fill="none" stroke-linecap="round" stroke-dasharray="${L}" stroke-dashoffset="${L*(1-pct/100)}"/></svg><b>${pct}%</b></div>
  <div><h2>${sal}, ${esc(U.nombre.split(' ')[0])} 👋</h2><div class="mut">${pct}% de tus expedientes en verde</div><div class="dots"><button class="dot" data-f="OBSERVADO">🔴 ${c.OBSERVADO}</button><button class="dot" data-f="SUBSANADO">🟠 ${c.SUBSANADO}</button><button class="dot" data-f="PENDIENTE">🟡 ${c.PENDIENTE}</button><button class="dot" data-f="COMPLETO">🟢 ${c.COMPLETO}</button></div></div></div>
  ${calCard()}
+ ${diaCard()}${avCard()}
  <div class="acts">${can('venta')?`<button class="act p" data-go="tVenta"><i>📝</i>Nueva venta<small>30 segundos</small></button>`:''}
  ${can('ver')?`<button class="act ${c.OBSERVADO?'r':''}" data-f="OBSERVADO"><i>${c.OBSERVADO?'🛠️':'✅'}</i>${c.OBSERVADO?'Por subsanar':'Todo al día'}<small>${c.OBSERVADO?c.OBSERVADO+' pendientes':'sin observaciones'}</small></button>${(()=>{const v=SALES.includes(U.rol),n=v?c.SUBSANADO:miPend().length;return n?`<button class="act" ${v?'data-f="SUBSANADO"':'id="bPv"'}><i>🟠</i>${v?'En espera':'Por verificar'}<small>${n} subsanado${n>1?'s':''} · ${v?'esperan a Contratos':U.area&&U.area!=='TODO'?'de '+esc(U.area):'revísalos'}</small></button>`:''})()}<button class="act" data-f="TODOS"><i>📋</i>Expedientes<small>${c.TODOS} en total</small></button>${(()=>{const nv=Object.keys(DUP.vta).length,nn=Object.keys(DUP.nom).length;return nv||nn?`<button class="act ${nv?'r':''}" id="bDup"><i>🧬</i>Duplicados<small>${nv?nv+' venta'+(nv>1?'s':'')+' · ':''}${nn} nombre${nn===1?'':'s'}</small></button>`:''})()}<button class="act" id="bS2"><i>🔎</i>Buscar<small>cliente o unidad</small></button>`:''}
  ${can('checklist')?`<button class="act" id="bCk"><i>📄</i>Checklist PDF<small>para firma del jefe</small></button>`:''}${can('cargo')?`<button class="act" id="bCg"><i>📥</i>Cargos<small>entrega de expedientes</small></button>`:''}
