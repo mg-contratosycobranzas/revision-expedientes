@@ -175,3 +175,13 @@ function puntosVerificar(token, id, lista, comentario) {
   log_(u.nombre, 'PUNTOS_VERIFICADOS', id + ' · ' + ok.length + ' conformes · ' + obs.length + ' siguen observados');
   return { conformes: ok.map(p => p.punto), observados: obs.map(p => p.punto) };
 }
+
+/* ---------- registro de respaldo de Bloqueo.gs y Ayuda.gs ----------
+ * En el proyecto, Bloqueo.gs y Ayuda.gs quedan ANTES que Code.gs. Apps Script carga los archivos en ese orden, así que cuando
+ * ellos intentan agregarse a API_PUBLICA esa lista todavía no existe (el error se ignora) y el motor responde "Operación no permitida".
+ * Este archivo carga DESPUÉS de Code.gs: aquí se registran de nuevo (si ya estaban, no se duplican). */
+try {
+  ['habEstado', 'habPedir', 'habDecidir', 'habPendientes', 'subsanarGeneral', 'habExcLista', 'habExcGuardar', 'habExcQuitar', 'ayudaGuias', 'ayudaGuardar']
+    .forEach(f => { if (API_PUBLICA.indexOf(f) < 0) API_PUBLICA.push(f); });
+  ['habEstado', 'habPendientes', 'habExcLista', 'ayudaGuias'].forEach(f => { if (SOLO_LECTURA.indexOf(f) < 0) SOLO_LECTURA.push(f); });
+} catch (e) {}
