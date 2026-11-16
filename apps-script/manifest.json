@@ -1,6 +1,6 @@
 {
-  "version": "2026.11.13-4",
-  "notas": "Firma de Gerencia por persona y varios archivos por evidencia",
+  "version": "2026.11.16-1",
+  "notas": "Control de files y corrección de habilitación fuera de plazo",
   "archivos": [
     "Ruta",
     "Comisiones",
@@ -8,16 +8,18 @@
     "Seguimiento",
     "Puntos",
     "Bloqueo",
-    "Tiempos"
+    "Tiempos",
+    "Files"
   ],
   "sha256": {
     "Ruta": "da3a8e6a0cb2692ea12031e285aee5c4fc8447f8fa5d0b684dbe44d333df8ec6",
     "Comisiones": "407c9a0a2e4cc6595be2473b2368f6a9d6e08c0b0aa8c998d80b6f9fc6b00d5d",
     "Ayuda": "0f3a579cd0f522a678c9b16e0e61ea44b2683da551b5e964e7b2d6000c73c467",
     "Seguimiento": "fa95c9c531a5ad4bce253a381eb167694009a42a1e90cb423b028e085cd8f199",
-    "Puntos": "e70c16f36010ad60077bcbac04fd3ab51bdf9b90764b0db394ade0d80723ff8e",
+    "Puntos": "7b022b5c9fc00bfb6c2f7b34fa76efc73158ec1cadde5dbba468a6424f6bed34",
     "Bloqueo": "d80b7cf346df67cea2646a1d6451752916fa44ee6672eb5c02a673c2ac54735d",
-    "Tiempos": "d44e5a406e8a9ddc0ff208b1a31b9e402d58f67ea86a2f6f6a434ad8a2c2a9ae"
+    "Tiempos": "d44e5a406e8a9ddc0ff208b1a31b9e402d58f67ea86a2f6f6a434ad8a2c2a9ae",
+    "Files": "64a5ebfaabfc4d30c209013c48f2b304d3d3771811922335fd98e3768f6b2f0f"
   },
-  "firma": "d698f322a09ec872470d889a488f14f1e3282fa20111ddfb82cbad10c9e8af8b"
+  "firma": ""
 }
