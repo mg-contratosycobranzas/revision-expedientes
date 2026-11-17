@@ -1,6 +1,6 @@
 {
-  "version": "2026.11.16-1",
-  "notas": "Control de files y corrección de habilitación fuera de plazo",
+  "version": "2026.11.17-1",
+  "notas": "Permiso del Excel de revisiones y plantillas de observación",
   "archivos": [
     "Ruta",
     "Comisiones",
@@ -9,17 +9,19 @@
     "Puntos",
     "Bloqueo",
     "Tiempos",
-    "Files"
+    "Files",
+    "Plantillas"
   ],
   "sha256": {
     "Ruta": "da3a8e6a0cb2692ea12031e285aee5c4fc8447f8fa5d0b684dbe44d333df8ec6",
     "Comisiones": "407c9a0a2e4cc6595be2473b2368f6a9d6e08c0b0aa8c998d80b6f9fc6b00d5d",
     "Ayuda": "0f3a579cd0f522a678c9b16e0e61ea44b2683da551b5e964e7b2d6000c73c467",
     "Seguimiento": "fa95c9c531a5ad4bce253a381eb167694009a42a1e90cb423b028e085cd8f199",
-    "Puntos": "7b022b5c9fc00bfb6c2f7b34fa76efc73158ec1cadde5dbba468a6424f6bed34",
+    "Puntos": "ab64bf798b7fdddf5e3a64eade14b5c9c16d9006ee7080709da13329148af0c9",
     "Bloqueo": "d80b7cf346df67cea2646a1d6451752916fa44ee6672eb5c02a673c2ac54735d",
     "Tiempos": "d44e5a406e8a9ddc0ff208b1a31b9e402d58f67ea86a2f6f6a434ad8a2c2a9ae",
-    "Files": "64a5ebfaabfc4d30c209013c48f2b304d3d3771811922335fd98e3768f6b2f0f"
+    "Files": "64a5ebfaabfc4d30c209013c48f2b304d3d3771811922335fd98e3768f6b2f0f",
+    "Plantillas": "26652fa31aa7324599bb4a1f58977b2abe7dd772ed27630e3470d8d84dbf886f"
   },
-  "firma": "9757d5c66f53de90eed1a863a0c853640c2bc9636b782499ce88b0ea582c9955"
+  "firma": "ae6d740754aab3c7529d92367462492da36f7022156efa3e07f79152864a62c0"
 }
