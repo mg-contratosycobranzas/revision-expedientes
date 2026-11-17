@@ -185,3 +185,6 @@ try {
     .forEach(f => { if (API_PUBLICA.indexOf(f) < 0) API_PUBLICA.push(f); });
   ['habEstado', 'habPendientes', 'habExcLista', 'ayudaGuias'].forEach(f => { if (SOLO_LECTURA.indexOf(f) < 0) SOLO_LECTURA.push(f); });
 } catch (e) {}
+
+/* permiso 📊 "Descargar Excel de revisiones": la administración lo tiene siempre; a los demás se les habilita o deshabilita en Accesos (⚙). */
+try { if (PERMISOS.indexOf('excel') < 0) PERMISOS.push('excel'); } catch (e) {}
