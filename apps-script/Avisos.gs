@@ -11,7 +11,7 @@
  */
 const HOJA_AVI = 'AVISOS_CORREO';
 const AVI_HDR = ['Fecha', 'Tipo', 'Vendedor', 'Para', 'Copia', 'Expedientes', 'Asunto', 'Resultado', 'Claves'];
-const AVI_DEF = { activo: false, hora: 8, d2: true, d1: true, d0: true, vencido: true, resumen: true, copiaJefe: true,
+const AVI_DEF = { activo: false, hora: 8, d2: true, d1: true, d0: true, vencido: true, resumen: true, copiaJefe: true, devuelto: false, habilitado: false, espera: false,
   copia: 'mvalles@grupomg.pe', portal: 'https://mg-contratosycobranzas.github.io/revision-expedientes/' };
 try {
   ['avisosConfig', 'avisosGuardar', 'avisosVista', 'avisosPrueba'].forEach(f => { if (API_PUBLICA.indexOf(f) < 0) API_PUBLICA.push(f); });
@@ -129,7 +129,58 @@ function aviArmar_(c, enviar) {
   return envios;
 }
 /** lo que ejecuta la tarea programada (una vez al día) */
-function avisosTick() { const c = aviCfg_(); if (!c.activo) return; aviArmar_(c, true); }
+function avisosTick() {
+  const c = aviCfg_();
+  if (c.activo) aviArmar_(c, true);
+  if (c.espera) try { aviEspera_(c); } catch (e) { console.log('aviEspera_: ' + e.message); }
+}
+
+/* ---------- avisos INMEDIATOS (salen en el momento; cada uno con su interruptor en el portal) ---------- */
+function aviMandar_(tipo, vendedor, para, cc, asunto, html, texto, exps, clave) {
+  para = aviMails_(para).join(','); cc = [...new Set(aviMails_(cc.join(',')))].filter(m => para.split(',').indexOf(m) < 0);
+  if (!para && cc.length) { para = cc.join(','); cc = []; }
+  let res = 'ENVIADO';
+  try { if (!para) res = 'SIN CORREO'; else MailApp.sendEmail({ to: para, cc: cc.join(','), subject: asunto, htmlBody: html, body: texto, name: 'Contratos y Cobranzas MG' }); }
+  catch (e) { res = 'ERROR: ' + e.message; }
+  try { aviHoja_().appendRow([new Date(), tipo, vendedor || '', para, cc.join(', '), (exps || []).join(', '), asunto, res, clave || '']); } catch (e) {}
+  return res;
+}
+const aviCaja_ = (c, cuerpo) => '<div style="font-family:Arial,sans-serif;font-size:14px;color:#1F2937;max-width:720px">' + cuerpo + '<p>Entra al <a href="' + aviEsc_(c.portal) + '">Cuadro de Revisiones</a> para ver el detalle.</p><p style="color:#667;font-size:12px">Aviso automático de Contratos y Cobranzas · Grupo MG.</p></div>';
+/** 🔴 Contratos devolvió puntos ("sigue observado") → al vendedor (y su jefe si está activa esa copia). */
+function aviDevuelto_(ex, obs, comentario, quien) {
+  const c = aviCfg_(); if (!c.devuelto || !obs || !obs.length) return;
+  const m = aviCorreos_(), para = m[norm_(ex.vendedor)] || '', jefe = c.copiaJefe ? (m[norm_(ex.jefe)] || '') : '';
+  const lis = obs.map(p => '<li><b>' + aviEsc_(p.punto) + '</b>' + (p.coment ? '<br><span style="color:#B42318">Motivo: ' + aviEsc_(p.coment) + '</span>' : '') + '</li>').join('');
+  const html = aviCaja_(c, '<p>Hola ' + aviEsc_(String(ex.vendedor).split(' ')[0]) + ',</p><p>' + aviEsc_(quien) + ' revisó tu subsanación de <b>' + aviEsc_(ex.cliente) + '</b> (' + aviEsc_(ex.proyecto + ' ' + ex.unidad) + ' · ' + aviEsc_(ex.id) + ') y <b style="color:#B42318">' + (obs.length > 1 ? 'estos puntos siguen observados' : 'este punto sigue observado') + '</b>:</p><ul>' + lis + '</ul>' + (comentario ? '<p>💬 ' + aviEsc_(comentario) + '</p>' : ''));
+  aviMandar_('DEVUELTO', ex.vendedor, para, [jefe], '🔴 Sigue observado: ' + ex.cliente + ' · ' + ex.proyecto + ' ' + ex.unidad + ' (' + obs.length + ' punto' + (obs.length > 1 ? 's' : '') + ')', html,
+    ex.id + ' sigue observado:\n' + obs.map(p => '• ' + p.punto + (p.coment ? ' — ' + p.coment : '')).join('\n') + (comentario ? '\n\n' + comentario : '') + '\n\n' + c.portal, [ex.id], 'DEVUELTO|' + ex.id + '|' + new Date().getTime());
+}
+/** 🔓 Habilitación de un expediente o excepción de plazo → a la persona (y al vendedor del expediente). */
+function aviHabilitado_(personas, asunto, detalle, exps) {
+  const c = aviCfg_(); if (!c.habilitado) return;
+  const m = aviCorreos_(), para = [...new Set(personas.map(p => m[norm_(p)]).filter(Boolean))];
+  if (!para.length) return;
+  aviMandar_('HABILITACION', personas[0], para.join(','), [], asunto, aviCaja_(c, '<p>' + detalle + '</p>'), detalle.replace(/<[^>]+>/g, '') + '\n\n' + c.portal, exps || [], '');
+}
+/** 🕓 Subsanaciones de Comercial que esperan la revisión de Contratos hace más de 2 días → a la copia fija (en la tarea diaria). */
+function aviEspera_(c) {
+  const fijos = aviMails_(c.copia); if (!fijos.length) return;
+  const ahora = new Date(), clave = 'ESPERA|' + aviDia_(ahora); if (aviHechos_()[clave]) return;
+  const sh = ss_().getSheetByName(HOJA_SUB), n = sh ? sh.getLastRow() : 0; if (n < 2) return;
+  const info = {}, ct = ss_().getSheetByName(HOJA_CONTROL), nc = ct.getLastRow();
+  if (nc >= 5) ct.getRange(5, 1, nc - 4, 11).getValues().forEach(r => { info[String(r[0]).trim()] = { cliente: txt_(r[1]), pu: txt_(r[2]) + ' ' + txt_(r[3]), vendedor: txt_(r[4]), revisor: txt_(r[10]) }; });
+  const l = [], vis = {};
+  sh.getRange(2, 1, n - 1, 8).getValues().forEach(r => {
+    const id = String(r[1]).trim(); if (!(r[0] instanceof Date) || !/Pendiente/i.test(String(r[7])) || vis[id]) return;
+    const h = (ahora - r[0]) / 36e5; if (h < 48) return; vis[id] = 1;
+    l.push({ id: id, dias: Math.floor(h / 24), quien: String(r[4]).replace(/\s*\(Ventas\)\s*$/, ''), areas: txt_(r[5]), i: info[id] || {} });
+  });
+  if (!l.length) return;
+  l.sort((a, b) => b.dias - a.dias);
+  const html = aviCaja_(c, '<p><b>' + l.length + ' subsanación' + (l.length > 1 ? 'es esperan' : ' espera') + ' la revisión de Contratos hace más de 2 días:</b></p><table style="border-collapse:collapse;width:100%"><tr style="background:#0C1A3D;color:#fff"><th style="padding:6px;text-align:left">Expediente</th><th style="padding:6px;text-align:left">Subsanó</th><th style="padding:6px;text-align:left">Área · revisor</th><th style="padding:6px">Días</th></tr>'
+    + l.map(x => '<tr><td style="padding:6px;border:1px solid #D9DEE8"><b>' + aviEsc_(x.i.cliente || x.id) + '</b><br><small>' + aviEsc_((x.i.pu || '') + ' · ' + x.id) + '</small></td><td style="padding:6px;border:1px solid #D9DEE8">' + aviEsc_(x.quien) + '</td><td style="padding:6px;border:1px solid #D9DEE8">' + aviEsc_(x.areas) + (x.i.revisor ? '<br><small>' + aviEsc_(x.i.revisor) + '</small>' : '') + '</td><td style="padding:6px;border:1px solid #D9DEE8;text-align:center;color:' + (x.dias >= 4 ? '#B42318' : '#B54708') + '"><b>' + x.dias + '</b></td></tr>').join('') + '</table>');
+  aviMandar_('ESPERA', '', fijos.join(','), [], '🕓 ' + l.length + ' subsanación' + (l.length > 1 ? 'es' : '') + ' esperando revisión hace más de 2 días', html, l.map(x => '• ' + x.id + ' · ' + x.dias + ' días · ' + x.quien).join('\n'), l.map(x => x.id), clave);
+}
 
 /** Administración: configuración, estado de la tarea diaria, vendedores sin correo y últimos envíos. */
 function avisosConfig(token) {
@@ -145,11 +196,12 @@ function avisosConfig(token) {
 function avisosGuardar(token, d) {
   const u = sesion_(token); aviAdmin_(u); d = d || {};
   const hora = Math.max(6, Math.min(20, Math.round(Number(d.hora) || 8))), copia = aviMails_(d.copia).join(', ');
-  const c = { activo: !!d.activo, hora: hora, d2: !!d.d2, d1: !!d.d1, d0: !!d.d0, vencido: !!d.vencido, resumen: !!d.resumen, copiaJefe: !!d.copiaJefe, copia: copia, portal: String(d.portal || AVI_DEF.portal).trim() };
+  const c = { activo: !!d.activo, hora: hora, d2: !!d.d2, d1: !!d.d1, d0: !!d.d0, vencido: !!d.vencido, resumen: !!d.resumen, copiaJefe: !!d.copiaJefe, copia: copia, portal: String(d.portal || AVI_DEF.portal).trim(),
+    devuelto: !!d.devuelto, habilitado: !!d.habilitado, espera: !!d.espera };
   if (!/^https:\/\//.test(c.portal)) c.portal = AVI_DEF.portal;
   PropertiesService.getScriptProperties().setProperty('AVISOS_CFG', JSON.stringify(c));
   ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === 'avisosTick').forEach(t => ScriptApp.deleteTrigger(t));
-  if (c.activo) ScriptApp.newTrigger('avisosTick').timeBased().everyDays(1).atHour(hora).inTimezone('America/Lima').create();
+  if (c.activo || c.espera) ScriptApp.newTrigger('avisosTick').timeBased().everyDays(1).atHour(hora).inTimezone('America/Lima').create();
   log_(u.nombre, 'AVISOS_CORREO', (c.activo ? 'activados ' + hora + ':00' : 'desactivados') + ' · copia ' + (copia || '—'));
   return avisosConfig(token);
 }

@@ -191,6 +191,7 @@ function puntosVerificar(token, id, lista, comentario) {
   if (obs.length) partes.push('🔴 Sigue observado: ' + obs.map(p => p.punto + (p.coment ? ' (' + p.coment + ')' : '')).join(', ') + '.');
   if (comentario) partes.push(comentario);
   try { subsanar(token, id, 'Revisión de puntos', partes.join(' '), null); } catch (e) { log_(u.nombre, 'PUNTOS_AVISO', id + ' · ' + e.message); }
+  if (obs.length && typeof aviDevuelto_ === 'function') try { aviDevuelto_(ex, obs, comentario, u.nombre); } catch (e) { log_(u.nombre, 'AVISO_DEVUELTO', id + ' · ' + e.message); }
   log_(u.nombre, 'PUNTOS_VERIFICADOS', id + ' · ' + ok.length + ' conformes · ' + obs.length + ' siguen observados');
   return { conformes: ok.map(p => p.punto), observados: obs.map(p => p.punto) };
 }

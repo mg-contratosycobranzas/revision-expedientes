@@ -104,6 +104,11 @@ function habDecidir(token, id, decision) {
   if (x && x.estado === 'PEDIDO') h.getRange(x.fila, 2).setValue(decision).offset(0, 4, 1, 2).setValues([[u.nombre, ahora]]);
   else h.appendRow(fila_([ex.id, decision, '', '', '(sin pedido: lo decidió ' + u.nombre + ')', u.nombre, ahora, '']));
   log_(u.nombre, 'HAB_' + decision.replace(/ /g, '_'), ex.id);
+  if (typeof aviHabilitado_ === 'function') try {
+    const quien = [x && x.estado === 'PEDIDO' ? x.pidio : '', ex.vendedor].filter(Boolean), si = decision !== 'RECHAZADO';
+    aviHabilitado_(quien, (si ? '🔓 Te habilitaron para subsanar: ' : '🙅 No se habilitó: ') + ex.cliente + ' · ' + ex.proyecto + ' ' + ex.unidad,
+      (si ? '🔓 <b>' + aviEsc_(u.nombre) + '</b> te habilitó para subsanar el expediente <b>' + aviEsc_(ex.cliente) + '</b> (' + aviEsc_(ex.proyecto + ' ' + ex.unidad + ' · ' + ex.id) + ')' + (decision === 'HABILITADO FUERA DE FECHA' ? ', aunque ya venció el plazo (quedará marcado fuera de plazo)' : '') + '.' : '🙅 ' + aviEsc_(u.nombre) + ' no habilitó el expediente <b>' + aviEsc_(ex.cliente) + '</b> (' + aviEsc_(ex.id) + '). Consulta con Contratos y Cobranzas.'), [ex.id]);
+  } catch (e) {}
   return { decision: decision };
 }
 
@@ -159,6 +164,9 @@ function habExcGuardar(token, persona, hastaISO, motivo) {
     h.appendRow(fila_([norm_(persona) === 'TODOS' ? 'TODOS' : persona, hasta, motivo, u.nombre, new Date(), 'ACTIVA']));
   } finally { lock.releaseLock(); }
   log_(u.nombre, 'EXCEPCION_PLAZO', persona + ' hasta ' + habF_(hasta) + (motivo ? ' · ' + motivo : ''));
+  if (norm_(persona) !== 'TODOS' && typeof aviHabilitado_ === 'function') try {
+    aviHabilitado_([persona], '⏰ Puedes subsanar fuera de plazo hasta el ' + habF_(hasta), '⏰ <b>' + aviEsc_(u.nombre) + '</b> te habilitó para subsanar <b>aunque haya vencido el plazo</b>, hasta el <b>' + aviEsc_(habF_(hasta)) + '</b>.' + (motivo ? ' Motivo: ' + aviEsc_(motivo) + '.' : '') + ' Lo que envíes quedará marcado como fuera de plazo.', []);
+  } catch (e) {}
   return { persona: persona, hasta: habF_(hasta) };
 }
 function habExcQuitar(token, persona) {
