@@ -115,6 +115,18 @@ function puntosTablero(token) {
   return out;
 }
 
+/** Puntos de un expediente según sus observaciones ESCRITAS (separadas por /) en las áreas observadas.
+ * Un área observada sin texto aparece como "Documentos observados en la ficha". Mismo criterio que el portal. */
+function punPartes_(ex) {
+  const L = [], vis = {}, parte = t => String(t || '').split(/\s*[\/\n;]\s*/).map(x => x.trim()).filter(x => x.length >= 2);
+  [['SBS', ex.sbs, ex.obsSbs], ['CIERRE', ex.ctr, ex.obsCtr]].forEach(a => {
+    const est = norm_(a[1]), p = parte(a[2]);
+    if (!(est === 'OBSERVADO' || (!est && p.length && norm_(ex.estado) !== 'COMPLETO'))) return;
+    (p.length ? p : ['Documentos observados en la ficha de ' + a[0]]).forEach(x => { const k = punClave_(a[0], x); if (!vis[k]) { vis[k] = 1; L.push({ area: a[0], punto: x }); } });
+  });
+  return L;
+}
+
 /** Estado guardado de los puntos del expediente (el portal lo cruza con las observaciones que ya tiene). */
 function puntosEstado(token, id) {
   sesion_(token); punAcceso_(token, id);
@@ -136,8 +148,15 @@ function puntosSubsanar(token, id, lista, texto, adjunto) {
     throw new Error('⏰ Venció el plazo para presentar subsanados (' + eHab.limite + '). Para enviar más puntos usa "Pedir habilitación".');
   const hb = eHab && eHab.bloqueado && eHab.motivo === 'ESPERA' ? null : (typeof habAntesDeSubsanar_ === 'function' ? habAntesDeSubsanar_(token, id) : null);
   texto = String(texto || '').trim();
-  const item = ps.length === 1 ? ps[0].area + ' · ' + ps[0].punto : 'Varios puntos (' + ps.length + ')';
-  const det = 'Subsané: ' + ps.map(p => p.punto).join(' / ') + (texto ? '\n✍️ ' + texto : '') + (hb && !habEsCC_(u) ? habNota_(hb.hab) : '');
+  // el correo y la conversación dicen qué se subsanó AHORA, qué ya espera revisión y qué sigue pendiente (no todo junto)
+  const env = {}; ps.forEach(p => { env[punClave_(p.area, p.punto)] = 1; });
+  const todos = punPartes_(ex), lin = l => l.map(p => '• ' + p.area + ' · ' + p.punto).join('\n');
+  const enRev = todos.filter(p => !env[punClave_(p.area, p.punto)] && yaEst[punClave_(p.area, p.punto)] === 'POR VERIFICAR');
+  const pend = todos.filter(p => !env[punClave_(p.area, p.punto)] && ['POR VERIFICAR', 'CONFORME'].indexOf(yaEst[punClave_(p.area, p.punto)]) < 0);
+  const item = ps.length === 1 ? ps[0].area + ' · ' + ps[0].punto : ps.length + (todos.length ? ' de ' + todos.length : '') + ' puntos';
+  const det = '✅ Subsanó ahora (' + ps.length + '):\n' + lin(ps) + (enRev.length ? '\n\n🕓 Ya en revisión (' + enRev.length + '):\n' + lin(enRev) : '')
+    + (todos.length ? (pend.length ? '\n\n🔴 Aún pendiente (' + pend.length + '):\n' + lin(pend) : '\n\n🎉 No le queda nada pendiente.') : '')
+    + (texto ? '\n\n✍️ ' + texto : '') + (hb && !habEsCC_(u) ? habNota_(hb.hab) : '');
   const r = subsanar(token, id, item, det, adjunto);   // historial en SUBSANACIONES, estado 🟠, plazo y correo a Contratos (Code.gs)
   if (hb && !habEsCC_(u)) habUsar_(String(id).trim(), hb.hab);
   const ahora = new Date();
@@ -172,6 +191,7 @@ function puntosVerificar(token, id, lista, comentario) {
   if (obs.length) partes.push('🔴 Sigue observado: ' + obs.map(p => p.punto + (p.coment ? ' (' + p.coment + ')' : '')).join(', ') + '.');
   if (comentario) partes.push(comentario);
   try { subsanar(token, id, 'Revisión de puntos', partes.join(' '), null); } catch (e) { log_(u.nombre, 'PUNTOS_AVISO', id + ' · ' + e.message); }
+  if (obs.length && typeof aviDevuelto_ === 'function') try { aviDevuelto_(ex, obs, comentario, u.nombre); } catch (e) { log_(u.nombre, 'AVISO_DEVUELTO', id + ' · ' + e.message); }
   log_(u.nombre, 'PUNTOS_VERIFICADOS', id + ' · ' + ok.length + ' conformes · ' + obs.length + ' siguen observados');
   return { conformes: ok.map(p => p.punto), observados: obs.map(p => p.punto) };
 }
