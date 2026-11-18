@@ -637,7 +637,7 @@ function opts(sel,vals,ph,deja){const c=sel.value,fuera=deja&&c&&!vals.includes(
 /* resumen de observaciones por área en la tarjeta (🔴 falta · 🟠 por verificar · ✅ conforme): mismos puntos que "Subsanar por punto" */
 let PT=null,NUMV={};
 function obsRes(x){if(!PT||!PT[x.id]||!['OBSERVADO','SUBSANADO'].includes(x.estado))return null;const d=PT[x.id],st={},r={};(d.st||[]).forEach(s=>st[pK(s[0],s[1])]=String(s[2]||'').toUpperCase());
- puntosDe(x,(d.it||[]).map(i=>({area:i[0],item:i[1],estado:'OBSERVADO'}))).forEach(p=>{const e=st[pK(p.area,p.punto)]||'PENDIENTE',a=r[p.area]=r[p.area]||{f:[],v:[],o:[]};(e==='CONFORME'?a.o:e==='POR VERIFICAR'?a.v:a.f).push(p.punto)});return r}
+ puntosDe(x,(d.it||[]).map(i=>({area:i[0],item:i[1],estado:'OBSERVADO'})),Object.fromEntries(Object.keys(st).filter(k=>st[k]!=='PENDIENTE').map(k=>[k,1]))).forEach(p=>{const e=st[pK(p.area,p.punto)]||'PENDIENTE',a=r[p.area]=r[p.area]||{f:[],v:[],o:[]};(e==='CONFORME'?a.o:e==='POR VERIFICAR'?a.v:a.f).push(p.punto)});return r}
 const obsFaltan=x=>{const R=obsRes(x);return R?Object.values(R).reduce((t,q)=>t+q.f.length,0):0};
 function obsHtml(x){const R=obsRes(x);if(!R)return '';const t=[],tt=[];['CIERRE','SBS'].filter(a=>R[a]).forEach(a=>{const q=R[a],s=n=>n>1?'s':'';
   if(q.v.length)t.push(`<span class="o sub">🟠 ${a} ${q.v.length} por verificar</span>`);if(q.o.length)t.push(`<span class="o ok">✅ ${a} ${q.o.length} conforme${s(q.o.length)}</span>`);
@@ -901,18 +901,21 @@ async function habUI(id,x,rev,pH){const box=$('#hab');if(!box)return;let e;try{e
  if($('#hPed'))$('#hPed').onclick=async()=>{const b=$('#hPed');busy(b,1,'⏳ Enviando…');try{await call('habPedir',T,id,$('#hMot').value);toast('🙋 Pedido enviado a Contratos y Cobranzas');habUI(id,x,rev,call('habEstado',T,id))}catch(z){toast(z.message,1);busy(b,0)}}}
 let PUN_R;   // reglas del motor de puntos instalado (undefined = aún no consultado; null = motor anterior)
 const pK=(a,p)=>String(a).toUpperCase()+'|'+String(p).toUpperCase().replace(/\s+/g,' ').trim();
-function puntosDe(x,items){const L=[],vis={},add=(area,p)=>{p=String(p||'').trim();if(p.length<2)return;const k=pK(area,p);if(vis[k])return;vis[k]=1;L.push({area,punto:p})};
- const parte=t=>String(t||'').split(/\s*[\/\n;]\s*/).map(s=>s.trim()).filter(Boolean);
- parte(x.obsSbs).forEach(p=>add('SBS',p));parte(x.obsCtr).forEach(p=>add('CIERRE',p));(items||[]).filter(i=>i.estado==='OBSERVADO').forEach(i=>add(i.area,i.item));return L}
+/* Puntos a subsanar de un expediente. Si el área tiene observación ESCRITA, cuentan solo sus partes (separadas por /):
+ * las casillas observadas de la ficha describen lo mismo (p. ej. "DNI VENCIDO" y la casilla del DNI) y no se cuentan dos veces.
+ * Si el área no tiene texto, cuentan las casillas observadas. Una casilla que Comercial ya marcó (guardada) se sigue mostrando. */
+function puntosDe(x,items,guardados){const L=[],vis={},add=(area,p)=>{p=String(p||'').trim();if(p.length<2)return;const k=pK(area,p);if(vis[k])return;vis[k]=1;L.push({area,punto:p})};
+ const parte=t=>String(t||'').split(/\s*[\/\n;]\s*/).map(s=>s.trim()).filter(Boolean),txt={SBS:parte(x.obsSbs),CIERRE:parte(x.obsCtr)},g=guardados||{};
+ txt.SBS.forEach(p=>add('SBS',p));txt.CIERRE.forEach(p=>add('CIERRE',p));(items||[]).filter(i=>i.estado==='OBSERVADO'&&(!(txt[i.area]||[]).length||g[pK(i.area,i.item)])).forEach(i=>add(i.area,i.item));return L}
 /* puntos CONFORME → casilla de la ficha CIERRE / SBS en OK (solo en pantalla: se guarda con 💾 Guardar revisión) */
 let FSYNC={id:null,P:[]};
 function fichaSync(P,id){if(P)FSYNC={id,P};else if(FSYNC.id!==id)return;const f=$('#fic');if(!f)return;
  const nz=s=>String(s||'').toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\s+/g,' ').trim(),ok={};
  FSYNC.P.filter(p=>p.estado==='CONFORME').forEach(p=>ok[nz(p.area)+'|'+nz(p.punto)]=p.punto);
- const hechos=[];let g='';
+ const hechos=[],todo={};['SBS','CIERRE'].forEach(a=>{const q=FSYNC.P.filter(p=>p.area===a);todo[a]=q.length&&q.every(p=>p.estado==='CONFORME')});let g='';
  $$('#fic .fg, #fic .fr').forEach(el=>{if(el.classList.contains('fg')){g=el.textContent;return}
   const s=el.querySelector('select[data-a]');if(!s||s.disabled||s.dataset.sync)return;const a=nz(s.dataset.a),t=(el.querySelector('span')||{}).textContent||'',v=s.value.toUpperCase();
-  const p=ok[a+'|'+nz(g+' · '+t)]||ok[a+'|'+nz(t)];
+  const p=ok[a+'|'+nz(g+' · '+t)]||ok[a+'|'+nz(t)]||(todo[s.dataset.a]&&v==='OBSERVADO'?'todos sus puntos están conformes':null);
   if(!p||!['OBSERVADO','PENDIENTE',''].includes(v)||![...s.options].some(o=>o.value==='OK'))return;
   s.value='OK';s.dataset.sync='1';s.style.outline='3px solid var(--or)';s.title='Marcado OK porque el punto ya está conforme. Se guarda con 💾 Guardar revisión.';s.dispatchEvent(new Event('change'));hechos.push(s.dataset.a+' · '+p)});
  if(!hechos.length&&!$('#ficSync'))return;
@@ -920,8 +923,9 @@ function fichaSync(P,id){if(P)FSYNC={id,P};else if(FSYNC.id!==id)return;const f=
   const e=$(`#fic [data-xa="${a}"][data-x="estado"]`);if(e&&!e.disabled&&e.value!=='OBSERVADO'&&[...e.options].some(o=>o.value==='OBSERVADO')){e.value='OBSERVADO';e.dispatchEvent(new Event('change'))}});
  let n=$('#ficSync');if(!n){f.insertAdjacentHTML('afterbegin','<div class="tip" id="ficSync" style="border-left-color:var(--or)"></div>');n=$('#ficSync')}
  const tot=$$('#fic select[data-sync]').length;n.innerHTML=`<b>✏️ Marqué OK ${tot} casilla${tot>1?'s':''} que ya aprobaste en Subsanación por punto</b> (resaltadas en naranja).<br>Revisa y pulsa <b>💾 Guardar revisión</b> para pasarlo al Excel. Si no guardas, el Excel no cambia.${faltan.length?`<br>🔴 El estado sigue en <b>OBSERVADO</b> porque aún faltan puntos: ${esc(faltan.join(' / '))}`:''}`}
-async function puntosUI(id,x,d,rev,pP,pH){const box=$('#pts');if(!box)return;const base=puntosDe(x,d.items);if(!base.length)return;
- let est=[],H={};try{est=await pP}catch(e){return}   // si el motor aún no tiene Puntos.gs, se queda como antes
+async function puntosUI(id,x,d,rev,pP,pH){const box=$('#pts');if(!box)return;let base=puntosDe(x,d.items);if(!base.length)return;
+ let est=[],H={};try{est=await pP}catch(e){return}
+ base=puntosDe(x,d.items,Object.fromEntries((est||[]).filter(e=>e.estado&&e.estado!=='PENDIENTE').map(e=>[pK(e.area,e.punto),1])));   // si el motor aún no tiene Puntos.gs, se queda como antes
  try{H=(await pH)||{}}catch(e){H={}}
  if(!$('#pts'))return;
  if(PUN_R===undefined)PUN_R=await call('puntosReglas',T).catch(()=>null);
