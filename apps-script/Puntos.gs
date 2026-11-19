@@ -96,20 +96,8 @@ function puntosTablero(token) {
   const out = {}, L = s => String(s || '').replace(/\s+/g, ' ').trim();
   misExpedientes(token).forEach(x => { if (x.estado === 'OBSERVADO' || x.estado === 'SUBSANADO') out[x.id] = { it: [], st: [] }; });
   if (!Object.keys(out).length) return out;
-  if (typeof FICHA_HOJAS !== 'undefined') Object.keys(FICHA_HOJAS).forEach(area => {
-    try {
-      const cfg = FICHA_HOJAS[area], sh = ss_().getSheetByName(cfg.hoja); if (!sh || sh.getLastRow() < cfg.f0) return;
-      const lc = sh.getLastColumn(), h4 = sh.getRange(4, 1, 1, lc).getDisplayValues()[0].map(L), h5 = area === 'SBS' ? sh.getRange(5, 1, 1, lc).getDisplayValues()[0].map(L) : h4.map(() => '');
-      const g4 = h4.slice(); sh.getRange(4, 1, 1, lc).getMergedRanges().forEach(m => { const v = L(m.getDisplayValue()); for (let c = m.getColumn(); c <= m.getLastColumn(); c++) g4[c - 1] = v; });
-      const nombre = t => t.replace(/^TITU\.?$/i, 'Titular').replace(/^C[OÓ]NY\.?$/i, 'Cónyuge'), tit = [];
-      for (let col = cfg.c0; col < cfg.c0 + cfg.n; col++) {   // mismo nombre que arma la ficha (leerFicha_ / detalleCompleto_)
-        const k = col - 1, sub = area === 'SBS' ? h5[k] : '', grupo = area === 'SBS' ? g4[k] : '', t = nombre(sub || h4[k] || h5[k] || ('Columna ' + col));
-        tit.push((grupo && grupo !== t ? grupo + ' · ' : '') + t);
-      }
-      const n = sh.getLastRow() - cfg.f0 + 1, ids = sh.getRange(cfg.f0, 1, n, 1).getDisplayValues(), vals = sh.getRange(cfg.f0, cfg.c0, n, cfg.n).getDisplayValues();
-      ids.forEach((r, i) => { const o = out[String(r[0]).trim()]; if (!o) return; vals[i].forEach((v, k) => { if (norm_(v) === 'OBSERVADO') o.it.push([area, tit[k]]); }); });
-    } catch (e) {}
-  });
+  // ⚡ las casillas observadas de las fichas CIERRE / SBS se leen una vez y quedan 5 minutos en caché para todos
+  const fo = punFichaObs_(); Object.keys(out).forEach(id => { if (fo[id]) out[id].it = fo[id]; });
   const h = ss_().getSheetByName(HOJA_PUN), np = h ? h.getLastRow() : 0;
   if (np > 1) h.getRange(2, 1, np - 1, 4).getValues().forEach(r => { const o = out[String(r[0]).trim()]; if (o) o.st.push([txt_(r[1]), txt_(r[2]), txt_(r[3]) || 'PENDIENTE']); });
   return out;
@@ -208,3 +196,28 @@ try {
 
 /* permiso 📊 "Descargar Excel de revisiones": la administración lo tiene siempre; a los demás se les habilita o deshabilita en Accesos (⚙). */
 try { if (PERMISOS.indexOf('excel') < 0) PERMISOS.push('excel'); } catch (e) {}
+
+/** ⚡ Casillas OBSERVADAS de las fichas CIERRE / SBS de TODOS los expedientes: { id: [[área, título], ...] }.
+ * Leer las fichas completas (con sus celdas combinadas) es lo más pesado del tablero; se guarda 5 minutos en caché
+ * y se renueva antes si alguien guarda algo desde el portal (verDatos_ cambia). */
+function punFichaObs_() {
+  const c = CacheService.getScriptCache(), k = 'punFicha_' + (typeof verDatos_ === 'function' ? verDatos_() : '');
+  const z = c.get(k); if (z) try { return JSON.parse(z); } catch (e) {}
+  const out = {}, L = s => String(s || '').replace(/\s+/g, ' ').trim();
+  if (typeof FICHA_HOJAS !== 'undefined') Object.keys(FICHA_HOJAS).forEach(area => {
+    try {
+      const cfg = FICHA_HOJAS[area], sh = ss_().getSheetByName(cfg.hoja); if (!sh || sh.getLastRow() < cfg.f0) return;
+      const lc = sh.getLastColumn(), h4 = sh.getRange(4, 1, 1, lc).getDisplayValues()[0].map(L), h5 = area === 'SBS' ? sh.getRange(5, 1, 1, lc).getDisplayValues()[0].map(L) : h4.map(() => '');
+      const g4 = h4.slice(); sh.getRange(4, 1, 1, lc).getMergedRanges().forEach(m => { const v = L(m.getDisplayValue()); for (let col = m.getColumn(); col <= m.getLastColumn(); col++) g4[col - 1] = v; });
+      const nombre = t => t.replace(/^TITU\.?$/i, 'Titular').replace(/^C[OÓ]NY\.?$/i, 'Cónyuge'), tit = [];
+      for (let col = cfg.c0; col < cfg.c0 + cfg.n; col++) {
+        const k2 = col - 1, sub = area === 'SBS' ? h5[k2] : '', grupo = area === 'SBS' ? g4[k2] : '', t = nombre(sub || h4[k2] || h5[k2] || ('Columna ' + col));
+        tit.push((grupo && grupo !== t ? grupo + ' · ' : '') + t);
+      }
+      const n = sh.getLastRow() - cfg.f0 + 1, ids = sh.getRange(cfg.f0, 1, n, 1).getDisplayValues(), vals = sh.getRange(cfg.f0, cfg.c0, n, cfg.n).getDisplayValues();
+      ids.forEach((r, i) => { const id = String(r[0]).trim(); if (!id) return; vals[i].forEach((v, k2) => { if (norm_(v) === 'OBSERVADO') (out[id] = out[id] || []).push([area, tit[k2]]); }); });
+    } catch (e) {}
+  });
+  try { const t = JSON.stringify(out); if (t.length < 95000) c.put(k, t, 300); } catch (e) {}
+  return out;
+}

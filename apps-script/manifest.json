@@ -1,6 +1,6 @@
 {
-  "version": "2026.11.18-1",
-  "notas": "Avisos por correo: plazos, devueltos, habilitaciones, espera de revisión y resumen para jefes",
+  "version": "2026.11.19-1",
+  "notas": "Velocidad: caché del tablero de puntos",
   "archivos": [
     "Ruta",
     "Comisiones",
@@ -18,12 +18,12 @@
     "Comisiones": "407c9a0a2e4cc6595be2473b2368f6a9d6e08c0b0aa8c998d80b6f9fc6b00d5d",
     "Ayuda": "0f3a579cd0f522a678c9b16e0e61ea44b2683da551b5e964e7b2d6000c73c467",
     "Seguimiento": "fa95c9c531a5ad4bce253a381eb167694009a42a1e90cb423b028e085cd8f199",
-    "Puntos": "4351ea6d968f364c65ef1650a05b67b8d995feeb0e6c84baa9bc6a5cf4249fd4",
+    "Puntos": "7d7203feed93908d6f70d5c35b6e4b69ae0732fa24c91f76811bfecda7515fc5",
     "Bloqueo": "92cedfe6903a9b634f52e939310c97d858e22dcf3938d17f4292134f6ecb41e8",
     "Tiempos": "d44e5a406e8a9ddc0ff208b1a31b9e402d58f67ea86a2f6f6a434ad8a2c2a9ae",
     "Files": "64a5ebfaabfc4d30c209013c48f2b304d3d3771811922335fd98e3768f6b2f0f",
     "Plantillas": "26652fa31aa7324599bb4a1f58977b2abe7dd772ed27630e3470d8d84dbf886f",
     "Avisos": "308acb0019908f8880659c005408d28f7b454376656af77ce13050dc77706eb5"
   },
-  "firma": "075117653e454e966225c168ccb3cae650d302005ee4a2ae22217724f73fd978"
+  "firma": "d251ec330603e93929903388d40188752abcb086279e030e7677af34d7a4e212"
 }
