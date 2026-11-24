@@ -91,7 +91,8 @@ function habPedir(token, id, motivo) {
   if (e.pedido) throw new Error('Ya pediste habilitación el ' + e.pedido.fecha + ': espera la respuesta.');
   habHoja_().appendRow(fila_([ex.id, 'PEDIDO', u.nombre, new Date(), motivo.slice(0, 500), '', '', '']));
   log_(u.nombre, 'HAB_PEDIDO', ex.id + ' · ' + (e.motivo === 'PLAZO' ? 'plazo vencido' : 'espera revisión') + ' · ' + motivo);
-  try { MailApp.sendEmail(admins_(), '🙋 Piden habilitar ' + ex.id + ' · ' + u.nombre, u.nombre + ' pide habilitar el expediente ' + ex.id + ' (' + ex.cliente + ' · ' + ex.proyecto + ' ' + ex.unidad + ').\nMotivo: ' + motivo + '\n' + (e.motivo === 'PLAZO' ? 'El plazo venció el ' + e.limite + '.' : 'Ya subsanó y espera la revisión.') + '\n\nResponde en el portal (🔔 o en el expediente).'); } catch (z) {}
+  const ref = typeof expRef_ === 'function' ? expRef_(ex) : ex.id + ' · ' + ex.cliente + ' · ' + ex.proyecto + ' ' + ex.unidad;
+  try { MailApp.sendEmail(admins_(), '🙋 Piden habilitar ' + ref + ' · ' + u.nombre, u.nombre + ' pide habilitar el expediente ' + ref + '.\nMotivo: ' + motivo + '\n' + (e.motivo === 'PLAZO' ? 'El plazo venció el ' + e.limite + '.' : 'Ya subsanó y espera la revisión.') + '\n\nResponde en el portal (🔔 o en el expediente).'); } catch (z) {}
   return { ok: true };
 }
 
@@ -106,8 +107,8 @@ function habDecidir(token, id, decision) {
   log_(u.nombre, 'HAB_' + decision.replace(/ /g, '_'), ex.id);
   if (typeof aviHabilitado_ === 'function') try {
     const quien = [x && x.estado === 'PEDIDO' ? x.pidio : '', ex.vendedor].filter(Boolean), si = decision !== 'RECHAZADO';
-    aviHabilitado_(quien, (si ? '🔓 Te habilitaron para subsanar: ' : '🙅 No se habilitó: ') + ex.cliente + ' · ' + ex.proyecto + ' ' + ex.unidad,
-      (si ? '🔓 <b>' + aviEsc_(u.nombre) + '</b> te habilitó para subsanar el expediente <b>' + aviEsc_(ex.cliente) + '</b> (' + aviEsc_(ex.proyecto + ' ' + ex.unidad + ' · ' + ex.id) + ')' + (decision === 'HABILITADO FUERA DE FECHA' ? ', aunque ya venció el plazo (quedará marcado fuera de plazo)' : '') + '.' : '🙅 ' + aviEsc_(u.nombre) + ' no habilitó el expediente <b>' + aviEsc_(ex.cliente) + '</b> (' + aviEsc_(ex.id) + '). Consulta con Contratos y Cobranzas.'), [ex.id]);
+    aviHabilitado_(quien, (si ? '🔓 Te habilitaron para subsanar: ' : '🙅 No se habilitó: ') + (typeof expRef_ === 'function' ? expRef_(ex) : ex.cliente + ' · ' + ex.proyecto + ' ' + ex.unidad),
+      (si ? '🔓 <b>' + aviEsc_(u.nombre) + '</b> te habilitó para subsanar el expediente <b>' + aviEsc_(ex.cliente) + '</b> (' + aviEsc_(typeof aviSub_ === 'function' ? aviSub_(ex) : ex.proyecto + ' ' + ex.unidad + ' · ' + ex.id) + ')' + (decision === 'HABILITADO FUERA DE FECHA' ? ', aunque ya venció el plazo (quedará marcado fuera de plazo)' : '') + '.' : '🙅 ' + aviEsc_(u.nombre) + ' no habilitó el expediente <b>' + aviEsc_(ex.cliente) + '</b> (' + aviEsc_(ex.id) + '). Consulta con Contratos y Cobranzas.'), [ex.id]);
   } catch (e) {}
   return { decision: decision };
 }

@@ -18,6 +18,25 @@ try {
   ['avisosConfig', 'avisosVista'].forEach(f => { if (SOLO_LECTURA.indexOf(f) < 0) SOLO_LECTURA.push(f); });
 } catch (e) {}
 
+/* ---------- identificación completa de un expediente en los correos ----------
+ * "EXP-2026-171 · CLIENTE · DNI 12345678 · PROYECTO 803". El DNI del titular sale de BASE MAESTRA (columna I);
+ * se lee una vez por ejecución. También la puede usar Code.gs (subsanar) si existe: typeof expRef_ === 'function'. */
+let AVI_BM_ = null;
+function aviBM_() {
+  if (AVI_BM_) return AVI_BM_; AVI_BM_ = {};
+  try { ss_().getSheetByName(HOJA_BM).getRange(PRIMERA_FILA, 1, ULTIMA_FILA - PRIMERA_FILA + 1, 9).getDisplayValues().forEach(r => {
+    const id = String(r[0]).trim(); if (id) AVI_BM_[id] = { cliente: r[7].trim(), dni: r[8].trim(), proyecto: r[4].trim(), unidad: r[6].trim() }; }); } catch (e) {}
+  return AVI_BM_;
+}
+function aviDni_(id) { const d = (aviBM_()[String(id || '').trim()] || {}).dni || ''; return d ? 'DNI ' + d : ''; }
+function expRef_(x) {
+  const o = (x && typeof x === 'object') ? x : {}, id = String(o.id || x || '').trim(), b = aviBM_()[id] || {};
+  const pu = ((o.proyecto || b.proyecto || '') + ' ' + (o.unidad || b.unidad || '')).trim();
+  return [id, o.cliente || b.cliente || '', aviDni_(id), pu].filter(Boolean).join(' · ');
+}
+/** Segunda línea de la ficha en los correos: "PROYECTO 803 · DNI 12345678 · EXP-2026-171". */
+function aviSub_(x) { return [((x.proyecto || '') + ' ' + (x.unidad || '')).trim(), aviDni_(x.id), x.id].filter(Boolean).join(' · '); }
+
 function aviAdmin_(u) { if (u.rol !== 'ADMIN') throw new Error('Solo la administración configura los avisos por correo.'); }
 function aviCfg_() {
   let c = {}; try { c = JSON.parse(PropertiesService.getScriptProperties().getProperty('AVISOS_CFG') || '{}'); } catch (e) {}
@@ -78,7 +97,7 @@ function aviCorreo_(ven, l, c, sinCorreo) {
   const urg = l[0], n = l.length, lim = fmtPlazo_(urg.lim);
   const asunto = (urg.etapa === 'VENCIDO' ? '⚠️ Venció el plazo para subsanar' : '⏰ ' + AVI_ET[urg.etapa][1] + ' (' + lim + ')') + ' · ' + n + ' expediente' + (n > 1 ? 's' : '') + ' por subsanar · ' + ven;
   const li = a => a.map(p => '<li>' + aviEsc_(p.area) + ' · ' + aviEsc_(p.punto) + '</li>').join('');
-  const fila = x => '<tr><td style="padding:8px;border:1px solid #D9DEE8;vertical-align:top"><b>' + aviEsc_(x.cliente) + '</b><br>' + aviEsc_(x.proyecto + ' ' + x.unidad) + '<br><small style="color:#667">' + aviEsc_(x.id) + '</small></td>'
+  const fila = x => '<tr><td style="padding:8px;border:1px solid #D9DEE8;vertical-align:top"><b>' + aviEsc_(x.cliente) + '</b><br>' + aviEsc_(x.proyecto + ' ' + x.unidad) + '<br><small style="color:#667">' + aviEsc_([aviDni_(x.id), x.id].filter(Boolean).join(' · ')) + '</small></td>'
     + '<td style="padding:8px;border:1px solid #D9DEE8;vertical-align:top;white-space:nowrap;color:' + (x.dias <= 0 ? '#B42318' : '#B54708') + '"><b>' + aviEsc_(AVI_ET[x.etapa][1]) + '</b><br>' + aviEsc_(fmtPlazo_(x.lim)) + '</td>'
     + '<td style="padding:8px;border:1px solid #D9DEE8;vertical-align:top"><b style="color:#B42318">🔴 Falta subsanar (' + x.pend.length + ')</b><ul style="margin:4px 0 0 16px;padding:0">' + li(x.pend) + '</ul>'
     + (x.rev.length ? '<b style="color:#B54708">🕓 En revisión de Contratos (' + x.rev.length + ')</b><ul style="margin:4px 0 0 16px;padding:0">' + li(x.rev) + '</ul>' : '') + '</td></tr>';
@@ -88,14 +107,14 @@ function aviCorreo_(ven, l, c, sinCorreo) {
     + '<table style="border-collapse:collapse;width:100%"><tr style="background:#0C1A3D;color:#fff"><th style="padding:8px;text-align:left">Expediente</th><th style="padding:8px;text-align:left">Plazo</th><th style="padding:8px;text-align:left">Qué falta</th></tr>' + l.map(fila).join('') + '</table>'
     + '<p>Entra al <a href="' + aviEsc_(c.portal) + '">Cuadro de Revisiones</a>, marca en cada expediente los puntos que ya subsanaste y adjunta el sustento.' + (l.some(x => x.etapa === 'VENCIDO') ? ' Si el plazo ya venció, pide habilitación desde el expediente.' : '') + '</p>'
     + '<p style="color:#667;font-size:12px">Aviso automático de Contratos y Cobranzas · Grupo MG.</p></div>';
-  const texto = 'Hola ' + String(ven).split(' ')[0] + ',\n\nTienes ' + n + ' expediente(s) por subsanar:\n\n' + l.map(x => '• ' + x.cliente + ' · ' + x.proyecto + ' ' + x.unidad + ' (' + x.id + ') — ' + AVI_ET[x.etapa][1] + ' (' + fmtPlazo_(x.lim) + ')\n  Falta: ' + x.pend.map(p => p.punto).join(' / ') + (x.rev.length ? '\n  En revisión: ' + x.rev.map(p => p.punto).join(' / ') : '')).join('\n\n') + '\n\nCuadro de Revisiones: ' + c.portal;
+  const texto = 'Hola ' + String(ven).split(' ')[0] + ',\n\nTienes ' + n + ' expediente(s) por subsanar:\n\n' + l.map(x => '• ' + expRef_(x) + ' — ' + AVI_ET[x.etapa][1] + ' (' + fmtPlazo_(x.lim) + ')\n  Falta: ' + x.pend.map(p => p.punto).join(' / ') + (x.rev.length ? '\n  En revisión: ' + x.rev.map(p => p.punto).join(' / ') : '')).join('\n\n') + '\n\nCuadro de Revisiones: ' + c.portal;
   return { asunto: asunto, html: html, texto: texto };
 }
 /** resumen para la administración */
 function aviResumen_(D, c, ahora) {
   const l = D.filter(x => x.dias >= -3 && x.dias <= 2).sort((a, b) => a.dias - b.dias || String(a.vendedor).localeCompare(b.vendedor)); if (!l.length) return null;
   const g = { v: l.filter(x => x.dias < 0), h: l.filter(x => x.dias === 0), p: l.filter(x => x.dias > 0) };
-  const t = (tit, a, col) => a.length ? '<h3 style="color:' + col + ';margin:16px 0 6px">' + tit + ' · ' + a.length + '</h3><table style="border-collapse:collapse;width:100%">' + a.map(x => '<tr><td style="padding:6px;border:1px solid #D9DEE8"><b>' + aviEsc_(x.vendedor) + '</b><br><small>' + aviEsc_(x.jefe) + '</small></td><td style="padding:6px;border:1px solid #D9DEE8">' + aviEsc_(x.cliente) + '<br><small>' + aviEsc_(x.proyecto + ' ' + x.unidad + ' · ' + x.id) + '</small></td><td style="padding:6px;border:1px solid #D9DEE8;white-space:nowrap">' + aviEsc_(fmtPlazo_(x.lim)) + '</td><td style="padding:6px;border:1px solid #D9DEE8">🔴 ' + x.pend.length + (x.rev.length ? ' · 🕓 ' + x.rev.length : '') + '</td></tr>').join('') + '</table>' : '';
+  const t = (tit, a, col) => a.length ? '<h3 style="color:' + col + ';margin:16px 0 6px">' + tit + ' · ' + a.length + '</h3><table style="border-collapse:collapse;width:100%">' + a.map(x => '<tr><td style="padding:6px;border:1px solid #D9DEE8"><b>' + aviEsc_(x.vendedor) + '</b><br><small>' + aviEsc_(x.jefe) + '</small></td><td style="padding:6px;border:1px solid #D9DEE8">' + aviEsc_(x.cliente) + '<br><small>' + aviEsc_(aviSub_(x)) + '</small></td><td style="padding:6px;border:1px solid #D9DEE8;white-space:nowrap">' + aviEsc_(fmtPlazo_(x.lim)) + '</td><td style="padding:6px;border:1px solid #D9DEE8">🔴 ' + x.pend.length + (x.rev.length ? ' · 🕓 ' + x.rev.length : '') + '</td></tr>').join('') + '</table>' : '';
   return { asunto: '📋 Resumen de plazos de subsanación · ' + Utilities.formatDate(ahora, 'America/Lima', 'dd/MM/yyyy') + ' · ' + g.h.length + ' vencen hoy · ' + g.v.length + ' vencidos',
     html: '<div style="font-family:Arial,sans-serif;font-size:14px;color:#1F2937;max-width:820px"><p>Expedientes con puntos por subsanar (🔴 pendientes · 🕓 en revisión):</p>' + t('⚠️ Vencidos (últimos 3 días)', g.v, '#B42318') + t('⏰ Vencen hoy', g.h, '#B54708') + t('📅 Vencen en 1 o 2 días', g.p, '#1F4E79') + '<p><a href="' + aviEsc_(c.portal) + '">Abrir el Cuadro de Revisiones</a></p></div>',
     texto: 'Vencidos: ' + g.v.length + ' · Vencen hoy: ' + g.h.length + ' · Próximos: ' + g.p.length + '\n' + c.portal, exps: l.map(x => x.id) };
@@ -152,9 +171,9 @@ function aviDevuelto_(ex, obs, comentario, quien) {
   const c = aviCfg_(); if (!c.devuelto || !obs || !obs.length) return;
   const m = aviCorreos_(), para = m[norm_(ex.vendedor)] || '', jefe = c.copiaJefe ? (m[norm_(ex.jefe)] || '') : '';
   const lis = obs.map(p => '<li><b>' + aviEsc_(p.punto) + '</b>' + (p.coment ? '<br><span style="color:#B42318">Motivo: ' + aviEsc_(p.coment) + '</span>' : '') + '</li>').join('');
-  const html = aviCaja_(c, '<p>Hola ' + aviEsc_(String(ex.vendedor).split(' ')[0]) + ',</p><p>' + aviEsc_(quien) + ' revisó tu subsanación de <b>' + aviEsc_(ex.cliente) + '</b> (' + aviEsc_(ex.proyecto + ' ' + ex.unidad) + ' · ' + aviEsc_(ex.id) + ') y <b style="color:#B42318">' + (obs.length > 1 ? 'estos puntos siguen observados' : 'este punto sigue observado') + '</b>:</p><ul>' + lis + '</ul>' + (comentario ? '<p>💬 ' + aviEsc_(comentario) + '</p>' : ''));
-  aviMandar_('DEVUELTO', ex.vendedor, para, [jefe], '🔴 Sigue observado: ' + ex.cliente + ' · ' + ex.proyecto + ' ' + ex.unidad + ' (' + obs.length + ' punto' + (obs.length > 1 ? 's' : '') + ')', html,
-    ex.id + ' sigue observado:\n' + obs.map(p => '• ' + p.punto + (p.coment ? ' — ' + p.coment : '')).join('\n') + (comentario ? '\n\n' + comentario : '') + '\n\n' + c.portal, [ex.id], 'DEVUELTO|' + ex.id + '|' + new Date().getTime());
+  const html = aviCaja_(c, '<p>Hola ' + aviEsc_(String(ex.vendedor).split(' ')[0]) + ',</p><p>' + aviEsc_(quien) + ' revisó tu subsanación de <b>' + aviEsc_(ex.cliente) + '</b> (' + aviEsc_(aviSub_(ex)) + ') y <b style="color:#B42318">' + (obs.length > 1 ? 'estos puntos siguen observados' : 'este punto sigue observado') + '</b>:</p><ul>' + lis + '</ul>' + (comentario ? '<p>💬 ' + aviEsc_(comentario) + '</p>' : ''));
+  aviMandar_('DEVUELTO', ex.vendedor, para, [jefe], '🔴 Sigue observado: ' + expRef_(ex) + ' (' + obs.length + ' punto' + (obs.length > 1 ? 's' : '') + ')', html,
+    expRef_(ex) + ' sigue observado:\n' + obs.map(p => '• ' + p.punto + (p.coment ? ' — ' + p.coment : '')).join('\n') + (comentario ? '\n\n' + comentario : '') + '\n\n' + c.portal, [ex.id], 'DEVUELTO|' + ex.id + '|' + new Date().getTime());
 }
 /** 🔓 Habilitación de un expediente o excepción de plazo → a la persona (y al vendedor del expediente). */
 function aviHabilitado_(personas, asunto, detalle, exps) {
@@ -179,8 +198,8 @@ function aviEspera_(c) {
   if (!l.length) return;
   l.sort((a, b) => b.dias - a.dias);
   const html = aviCaja_(c, '<p><b>' + l.length + ' subsanación' + (l.length > 1 ? 'es esperan' : ' espera') + ' la revisión de Contratos hace más de 2 días:</b></p><table style="border-collapse:collapse;width:100%"><tr style="background:#0C1A3D;color:#fff"><th style="padding:6px;text-align:left">Expediente</th><th style="padding:6px;text-align:left">Subsanó</th><th style="padding:6px;text-align:left">Área · revisor</th><th style="padding:6px">Días</th></tr>'
-    + l.map(x => '<tr><td style="padding:6px;border:1px solid #D9DEE8"><b>' + aviEsc_(x.i.cliente || x.id) + '</b><br><small>' + aviEsc_((x.i.pu || '') + ' · ' + x.id) + '</small></td><td style="padding:6px;border:1px solid #D9DEE8">' + aviEsc_(x.quien) + '</td><td style="padding:6px;border:1px solid #D9DEE8">' + aviEsc_(x.areas) + (x.i.revisor ? '<br><small>' + aviEsc_(x.i.revisor) + '</small>' : '') + '</td><td style="padding:6px;border:1px solid #D9DEE8;text-align:center;color:' + (x.dias >= 4 ? '#B42318' : '#B54708') + '"><b>' + x.dias + '</b></td></tr>').join('') + '</table>');
-  aviMandar_('ESPERA', '', fijos.join(','), [], '🕓 ' + l.length + ' subsanación' + (l.length > 1 ? 'es' : '') + ' esperando revisión hace más de 2 días', html, l.map(x => '• ' + x.id + ' · ' + x.dias + ' días · ' + x.quien).join('\n'), l.map(x => x.id), clave);
+    + l.map(x => '<tr><td style="padding:6px;border:1px solid #D9DEE8"><b>' + aviEsc_(x.i.cliente || x.id) + '</b><br><small>' + aviEsc_([x.i.pu || '', aviDni_(x.id), x.id].filter(Boolean).join(' · ')) + '</small></td><td style="padding:6px;border:1px solid #D9DEE8">' + aviEsc_(x.quien) + '</td><td style="padding:6px;border:1px solid #D9DEE8">' + aviEsc_(x.areas) + (x.i.revisor ? '<br><small>' + aviEsc_(x.i.revisor) + '</small>' : '') + '</td><td style="padding:6px;border:1px solid #D9DEE8;text-align:center;color:' + (x.dias >= 4 ? '#B42318' : '#B54708') + '"><b>' + x.dias + '</b></td></tr>').join('') + '</table>');
+  aviMandar_('ESPERA', '', fijos.join(','), [], '🕓 ' + l.length + ' subsanación' + (l.length > 1 ? 'es' : '') + ' esperando revisión hace más de 2 días', html, l.map(x => '• ' + expRef_(x.i && x.i.cliente ? { id: x.id, cliente: x.i.cliente } : x.id) + ' · ' + x.dias + ' días · ' + x.quien).join('\n'), l.map(x => x.id), clave);
 }
 
 /** Administración: configuración, estado de la tarea diaria, vendedores sin correo y últimos envíos. */
@@ -263,7 +282,7 @@ function aviJefes_(c, enviar, soloUno) {
     if (!ci.length && !ob.length) return;
     const cnt = k => ci.filter(x => norm_(x.estado) === k).length, porV = {};
     ob.forEach(x => (porV[x.vendedor] = porV[x.vendedor] || []).push(x));
-    const fila = x => '<tr><td style="padding:6px;border:1px solid #D9DEE8;vertical-align:top"><b>' + aviEsc_(x.cliente) + '</b><br><small>' + aviEsc_(x.proyecto + ' ' + x.unidad + ' · ' + x.id + ' · ' + aviCap_(x.mes)) + '</small></td>'
+    const fila = x => '<tr><td style="padding:6px;border:1px solid #D9DEE8;vertical-align:top"><b>' + aviEsc_(x.cliente) + '</b><br><small>' + aviEsc_(aviSub_(x) + ' · ' + aviCap_(x.mes)) + '</small></td>'
       + '<td style="padding:6px;border:1px solid #D9DEE8;vertical-align:top">' + (x.pend.length ? '<b style="color:#B42318">🔴 ' + x.pend.length + '</b> ' + aviEsc_(x.pend.map(p => p.punto).join(' / ')) : '') + (x.rev.length ? '<br><span style="color:#B54708">🕓 ' + x.rev.length + ' en revisión</span>' : '') + '</td>'
       + '<td style="padding:6px;border:1px solid #D9DEE8;vertical-align:top;white-space:nowrap;color:' + (x.dias != null && x.dias <= 0 ? '#B42318' : '#1F2937') + '">' + (x.lim ? aviEsc_(fmtPlazo_(x.lim)) + (x.dias < 0 ? '<br><b>vencido</b>' : x.dias === 0 ? '<br><b>vence hoy</b>' : '') : '—') + '</td></tr>';
     const html = '<div style="font-family:Arial,sans-serif;font-size:14px;color:#1F2937;max-width:820px"><p>Hola ' + aviEsc_(aviCap_(String(j).split(' ')[0])) + ',</p><p>Este es el resumen de revisiones de tu equipo.</p>'
