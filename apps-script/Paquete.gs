@@ -15,9 +15,11 @@
  *
  * Vigencia: el paquete lleva la versión de datos (verDatos_). Cualquier guardado desde el portal o edición directa
  * en el Sheet cambia esa versión; el portal lo nota y pide el paquete nuevo en segundo plano.
- * El paquete armado se guarda 10 minutos en caché por persona (otra pestaña u otro equipo lo recibe al instante).
+ * El paquete COMÚN se arma una sola vez por versión (para todos) y cada persona recibe solo lo que puede ver.
+ * Ambos quedan 30 minutos en caché. ⚡ Se habilita por persona con el permiso "instantaneo" (la administración siempre).
  */
 try {
+  if (PERMISOS.indexOf('instantaneo') < 0) PERMISOS.push('instantaneo');   // ⚡ se habilita por persona en Accesos
   ['paquete', 'paqVerificar'].forEach(f => {
     if (API_PUBLICA.indexOf(f) < 0) API_PUBLICA.push(f);
     if (SOLO_LECTURA.indexOf(f) < 0) SOLO_LECTURA.push(f);
