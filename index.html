@@ -255,7 +255,7 @@ function paqSync(){if(PAQ_SYNC)return PAQ_SYNC;const ini=Date.now();PAQ_SYNC=(as
   Object.keys(PAQ_SUC).forEach(id=>{if(PAQ_SUC[id]<ini)delete PAQ_SUC[id]});   // lo guardado antes de pedir el paquete ya viene incluido
   if(P.tab){PT=P.tab;PTT=Date.now()}if(P.cal)CAL=P.cal;
   try{localStorage.setItem(PAQ_K(),JSON.stringify({v:r.v,gz:r.gz,t:Date.now()}))}catch(e){}return true}
- catch(e){PAQ_ERR=e.message;if(/no permitida|no disponible/i.test(e.message))PAQ_ON=false;return false}finally{PAQ_SYNC=null}})();return PAQ_SYNC}
+ catch(e){PAQ_ERR=e.message;if(/no permitida|no disponible|no está disponible/i.test(e.message))PAQ_ON=false;return false}finally{PAQ_SYNC=null}})();return PAQ_SYNC}
 /* dato del paquete para un expediente (undefined = no está: se consulta a Google como siempre) */
 function pq(tipo,id){if(!instOn()||!PAQ||PAQ_SUC[id]||!PAQ[tipo]||!(id in PAQ[tipo]))return undefined;const v=PAQ[tipo][id];if(v&&v.error)return undefined;return v==null?v:JSON.parse(JSON.stringify(v))}
 /* al guardar algo de un expediente, ese expediente deja de leerse del paquete hasta la siguiente actualización */
