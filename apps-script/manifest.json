@@ -1,6 +1,6 @@
 {
-  "version": "2026.11.24-6",
-  "notas": "Modo instantáneo más liviano",
+  "version": "2026.11.24-7",
+  "notas": "Correos con identificación completa del expediente",
   "archivos": [
     "Ruta",
     "Comisiones",
@@ -21,13 +21,13 @@
     "Ayuda": "0f3a579cd0f522a678c9b16e0e61ea44b2683da551b5e964e7b2d6000c73c467",
     "Seguimiento": "fa95c9c531a5ad4bce253a381eb167694009a42a1e90cb423b028e085cd8f199",
     "Puntos": "7d7203feed93908d6f70d5c35b6e4b69ae0732fa24c91f76811bfecda7515fc5",
-    "Bloqueo": "92cedfe6903a9b634f52e939310c97d858e22dcf3938d17f4292134f6ecb41e8",
+    "Bloqueo": "0fda912bf8bb8fd6addce2a4d9f3d1815f9966f8f661d9cab9fff04ace137c63",
     "Tiempos": "d44e5a406e8a9ddc0ff208b1a31b9e402d58f67ea86a2f6f6a434ad8a2c2a9ae",
     "Files": "64a5ebfaabfc4d30c209013c48f2b304d3d3771811922335fd98e3768f6b2f0f",
     "Plantillas": "26652fa31aa7324599bb4a1f58977b2abe7dd772ed27630e3470d8d84dbf886f",
-    "Avisos": "308acb0019908f8880659c005408d28f7b454376656af77ce13050dc77706eb5",
+    "Avisos": "95c43b288b70f15c98f27f82a0eded766ac536a547e0dde1f3a3d120fdf19747",
     "Rapido": "50c82e0b65202c37c3b42c892c9b190be2faa02cd19f8158df8405c474403607",
     "Paquete": "89dab3518ed826cf2df36364eb18184bf35d91e1ee2384ff2c066ddc1fc458bf"
   },
-  "firma": "1c191511fc1ff823a4566cd03a1ba150f0a1d5f72f0501458b645b3fed9b8759"
+  "firma": "a2d503abc18050285f9d2fa364d89fc9836245514fdb1e4d7b78f67b6aa6e947"
 }
