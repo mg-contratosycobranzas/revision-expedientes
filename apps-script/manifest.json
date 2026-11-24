@@ -1,6 +1,6 @@
 {
-  "version": "2026.11.24-5",
-  "notas": "Modo instantáneo: el motor exige el permiso instantaneo",
+  "version": "2026.11.24-6",
+  "notas": "Modo instantáneo más liviano",
   "archivos": [
     "Ruta",
     "Comisiones",
@@ -27,7 +27,7 @@
     "Plantillas": "26652fa31aa7324599bb4a1f58977b2abe7dd772ed27630e3470d8d84dbf886f",
     "Avisos": "308acb0019908f8880659c005408d28f7b454376656af77ce13050dc77706eb5",
     "Rapido": "50c82e0b65202c37c3b42c892c9b190be2faa02cd19f8158df8405c474403607",
-    "Paquete": "82ddb071409965bfaaf32ba54b08387eb01b3ec410f19eff8c13d222c98ef8c9"
+    "Paquete": "89dab3518ed826cf2df36364eb18184bf35d91e1ee2384ff2c066ddc1fc458bf"
   },
-  "firma": "baca00fa644c63f434d805d95d89af9af4f117fe2ce65c69d4e904d2cccc30c7"
+  "firma": "1c191511fc1ff823a4566cd03a1ba150f0a1d5f72f0501458b645b3fed9b8759"
 }

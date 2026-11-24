@@ -249,10 +249,14 @@ const PAQ_K=()=>'mgPaq_'+(U&&U.nombre||''),PAQ_LEER=/^(yo|misExpedientes|calenda
 const instOn=()=>{if(PAQ_ON===false||!U)return false;let f=null;try{f=localStorage.getItem('mgInst')}catch(e){}return U.rol==='ADMIN'?f==='1':(can('instantaneo')&&f!=='0')};
 async function gunzip64(b){const bin=Uint8Array.from(atob(b),c=>c.charCodeAt(0));const st=new Blob([bin]).stream().pipeThrough(new DecompressionStream('gzip'));return JSON.parse(await new Response(st).text())}
 async function paqCarga(){if(PAQ||!U)return PAQ;try{const z=localStorage.getItem(PAQ_K());if(z){const o=JSON.parse(z),P=await gunzip64(o.gz);P.v=o.v;P.rec=o.t;PAQ=P}}catch(e){}return PAQ}
+let PAQ_RT=null;   // reintento programado: el motor aún arma el paquete o entregó uno anterior a los últimos cambios
+function paqReintento(ms){if(PAQ_RT||!instOn())return;PAQ_RT=setTimeout(()=>{PAQ_RT=null;paqSync()},ms)}
 function paqSync(){if(PAQ_SYNC)return PAQ_SYNC;const ini=Date.now();PAQ_SYNC=(async()=>{try{await paqCarga();const r=await call('paquete',T,PAQ&&PAQ.v||'');
-  if(r.igual){if(PAQ)PAQ.rec=Date.now();return false}
+  if(r.armando){paqReintento(15000);return false}   // otra consulta lo está armando: se vuelve a pedir en un rato
+  if(r.igual){if(PAQ)PAQ.rec=Date.now();if(r.pendiente)paqReintento(20000);return false}
   const P=await gunzip64(r.gz);P.v=r.v;P.rec=Date.now();P.dur=Date.now()-ini;PAQ=P;PAQ_ON=true;PAQ_ERR='';
-  Object.keys(PAQ_SUC).forEach(id=>{if(PAQ_SUC[id]<ini)delete PAQ_SUC[id]});   // lo guardado antes de pedir el paquete ya viene incluido
+  // lo guardado antes de pedir el paquete ya viene incluido, salvo que el motor avise que este paquete es anterior a los últimos cambios
+  if(r.pendiente)paqReintento(20000);else Object.keys(PAQ_SUC).forEach(id=>{if(PAQ_SUC[id]<ini)delete PAQ_SUC[id]});
   if(P.tab){PT=P.tab;PTT=Date.now()}if(P.cal)CAL=P.cal;
   try{localStorage.setItem(PAQ_K(),JSON.stringify({v:r.v,gz:r.gz,t:Date.now()}))}catch(e){}return true}
  catch(e){PAQ_ERR=e.message;if(/no permitida|no disponible|no está disponible/i.test(e.message))PAQ_ON=false;return false}finally{PAQ_SYNC=null}})();return PAQ_SYNC}
