@@ -329,7 +329,15 @@ function arrancar(){$('#vLogin').classList.add('hide');$('#app').classList.remov
 /* ---------- ver como (admin): el portal tal como lo ve otra persona, en solo lectura ---------- */
 const adm=()=>{try{return JSON.parse(sessionStorage.getItem('mgAdm')||'null')}catch(e){return null}};
 function barraComo(){let b=$('#como');if(!adm()){if(b)b.remove();return}if(!b){b=document.createElement('div');b.id='como';document.body.prepend(b)}
- b.innerHTML=`👁️ Viendo como <b>${esc(U.nombre)}</b> · ${esc(RL[U.rol]||U.rol.toLowerCase())} · solo lectura <button class="btn sm" id="comoX">↩️ Volver a mi usuario</button>`;$('#comoX').onclick=volverComo}
+ b.innerHTML=`👁️ Viendo como <b>${esc(U.nombre)}</b> · ${esc(RL[U.rol]||U.rol.toLowerCase())} · solo lectura <button class="btn sm" id="comoV" style="margin-right:6px">🔍 Verificar ⚡</button><button class="btn sm" id="comoX">↩️ Volver a mi usuario</button>`;$('#comoX').onclick=volverComo;$('#comoV').onclick=verificarComo}
+/* ⚡ desde "Ver como": compara el paquete de ESTA persona (con sus permisos) con abrir sus expedientes de la forma normal */
+async function verificarComo(){const m=$('#mod'),s=$('#sheet');m.classList.add('on');
+ const cab=`<div style="display:flex;justify-content:space-between;gap:8px"><div><h2>🔍 Verificar ⚡ Modo instantáneo</h2><div class="mut">Con los permisos de <b>${esc(U.nombre)}</b></div></div><button class="ib" style="background:var(--soft);color:var(--ink);border:0" id="vcX" aria-label="Cerrar">✕</button></div>`;
+ s.innerHTML=cab+`<p class="mut">Comparo hasta 15 expedientes de ${esc(U.nombre.split(' ')[0])}: lo que trae el paquete contra abrirlos de la forma normal. Tarda 1 o 2 minutos.</p><div class="skel"></div>`;$('#vcX').onclick=()=>m.classList.remove('on');
+ try{const r=await call('paqVerificar',T,15);if(!$('#vcX'))return;
+  s.innerHTML=cab+(r.diferencias?`<div class="dupbox" style="margin-top:10px"><b>⚠️ ${r.diferencias} diferencia${r.diferencias>1?'s':''} en ${r.revisados} expedientes</b><br><small>No le actives el modo todavía. Copia esto y envíalo:</small><textarea style="width:100%;height:140px;font-size:11px">${esc(JSON.stringify(r.ejemplos,null,1))}</textarea></div>`
+   :`<div class="tip" style="border-left-color:var(--ok);margin-top:10px"><b>✅ Todo coincide</b><br><small>${r.revisados} expediente${r.revisados===1?'':'s'} de ${esc(r.usuario)}: el paquete da exactamente lo mismo que abrirlos normal.</small></div><p class="mut">Ya puedes activarle <b>⚡ Modo instantáneo</b>: vuelve a tu usuario → 👥 Accesos → ⚙️ en su fila.</p>`);$('#vcX').onclick=()=>m.classList.remove('on')}
+ catch(e){if($('#vcX')){s.innerHTML=cab+`<div class="dupbox" style="margin-top:10px">${esc(e.message)}</div>`;$('#vcX').onclick=()=>m.classList.remove('on')}}}
 function cambiarA(r){T=r.token;U=r.user;guardar(r);VTA=null;INT=null;DATA=[];ANU=[];OPC=null;ABIERTO=null;$('#mod').classList.remove('on');arrancar();barraComo();scrollTo({top:0})}
 async function verComo(a){try{const r=await call('verComo',T,a.fila);try{sessionStorage.setItem('mgAdm',JSON.stringify({token:T,user:U}))}catch(e){}cambiarA(r);toast('👁️ Viendo como '+a.nombre)}catch(e){toast(e.message,1)}}
 function volverComo(){const a=adm();call('salirSesion',T).catch(()=>{});try{sessionStorage.removeItem('mgAdm')}catch(e){}if(a)cambiarA(a);else salir(true)}
