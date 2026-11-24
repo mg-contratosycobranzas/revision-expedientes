@@ -1,6 +1,6 @@
 {
-  "version": "2026.11.24-1",
-  "notas": "Velocidad: caché del detalle y la ficha",
+  "version": "2026.11.24-2",
+  "notas": "Abrir expedientes más rápido",
   "archivos": [
     "Ruta",
     "Comisiones",
@@ -25,7 +25,7 @@
     "Files": "64a5ebfaabfc4d30c209013c48f2b304d3d3771811922335fd98e3768f6b2f0f",
     "Plantillas": "26652fa31aa7324599bb4a1f58977b2abe7dd772ed27630e3470d8d84dbf886f",
     "Avisos": "308acb0019908f8880659c005408d28f7b454376656af77ce13050dc77706eb5",
-    "Rapido": "258d852d2b6c19c77ccf8a7dde90822b9faaa8cd8180a976b35a86bdc437ef19"
+    "Rapido": "50c82e0b65202c37c3b42c892c9b190be2faa02cd19f8158df8405c474403607"
   },
-  "firma": "f36712c88425c9695c38433de0893f0ef0f88da270d2bc6ecc8a44cfba36acef"
+  "firma": "8b64c26d582e1a2712e25e527c33aecc09bdf3172682a561225677ddb25d889f"
 }
