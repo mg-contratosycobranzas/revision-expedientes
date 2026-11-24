@@ -26,7 +26,7 @@ try {
   });
 } catch (e) {}
 
-const PAQ_MAX_MS = 150000, PAQ_SEG = 1800, PAQ_TROZO = 90000, PAQ_SUPER = '__paquete_comun__';
+const PAQ_MAX_MS = 150000, PAQ_SEG = 1800, PAQ_TROZO = 90000, PAQ_SUPER = '__paquete_comun__', PAQ_FRESCO_MS = 90000, PAQ_FULL_MS = 30 * 60000;
 
 /* ---------------- memoria de hojas (solo lectura) ---------------- */
 function paqProxy_(obj, real) {
@@ -105,17 +105,39 @@ function paqSuper_() {
 }
 const paqClon_ = o => o == null ? o : JSON.parse(JSON.stringify(o));
 const paqObs_ = x => x.estado === 'OBSERVADO' || x.estado === 'SUBSANADO';
-function paqArmarComun_() {
+/* Huella de cada expediente: todo lo que usan su detalle, su ficha y sus puntos (filas de CONTROL, CIERRE, SBS,
+ * BASE MAESTRA, SUBSANACIONES, SUBSANACION_PUNTOS y ANULADOS). Si la huella no cambió, se reutiliza lo ya armado.
+ * Huella global: encabezados de CIERRE/SBS, CONTACTOS y ACCESO_WEB (si cambian, se arma todo de nuevo). */
+function paqHuellas_() {
+  const ss = ss_(), F = {}, md5 = t => Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, t));
+  const add = (id, r) => { id = String(id || '').trim(); if (/^EXP/i.test(id)) F[id] = (F[id] || '') + '|' + JSON.stringify(r); };
+  const filas = (n, f0, colId) => { const h = ss.getSheetByName(n); if (!h) return; const lr = h.getLastRow(), lc = h.getLastColumn(); if (lr < f0 || lc < 1) return;
+    h.getRange(f0, 1, lr - f0 + 1, lc).getValues().forEach((r, i) => add(r[colId], [n, f0 + i, r])); };
+  filas(HOJA_CONTROL, 5, 0); filas(HOJA_CIERRE, 5, 0); filas(HOJA_SBS, 6, 0); filas(HOJA_BM, 5, 0);
+  filas(HOJA_SUB, 2, 1); filas(typeof HOJA_PUN !== 'undefined' ? HOJA_PUN : 'SUBSANACION_PUNTOS', 2, 0); filas('ANULADOS', 2, 0);
+  let g = '';
+  [[HOJA_CIERRE, 4], [HOJA_SBS, 5]].forEach(([n, k]) => { const h = ss.getSheetByName(n); if (h) g += JSON.stringify(h.getRange(1, 1, k, Math.max(h.getLastColumn(), 1)).getDisplayValues()); });
+  ['CONTACTOS', HOJA_ACCESO].forEach(n => { const h = ss.getSheetByName(n); if (h && h.getLastRow() >= 1) g += JSON.stringify(h.getRange(1, 1, h.getLastRow(), Math.min(Math.max(h.getLastColumn(), 1), 6)).getValues()); });
+  const H = {}; Object.keys(F).forEach(id => H[id] = md5(F[id]));
+  return { porId: H, global: md5(g) };
+}
+function paqArmarComun_(prev) {
   const t0 = Date.now(), ver = verDatos_(), tk = PAQ_SUPER;
   return paqConMemoria_(() => {
     const lista = paqClon_(misExpedientes(tk)) || [];
-    const P = { v: ver, t: Date.now(), det: {}, fic: {}, pun: {}, falta: [], ms: 0, n: lista.length };
+    const hu = paqHuellas_(), todo = !prev || !prev.h || prev.hg !== hu.global || !prev.full || Date.now() - prev.full > PAQ_FULL_MS;
+    const P = { v: ver, t: Date.now(), det: {}, fic: {}, pun: {}, falta: [], ms: 0, n: lista.length, h: hu.porId, hg: hu.global, full: todo ? Date.now() : prev.full, rehechos: 0 };
     // primero lo que más se abre: observados y en revisión, luego pendientes, luego aprobados (los más nuevos primero)
     const peso = x => x.anulado ? 4 : paqObs_(x) ? 0 : x.estado === 'COMPLETO' ? 2 : 1;
     const orden = lista.map((x, i) => ({ x: x, i: i })).sort((a, b) => peso(a.x) - peso(b.x) || b.i - a.i).map(o => o.x);
     for (let k = 0; k < orden.length; k++) {
       const x = orden[k], id = x.id;
+      if (!todo && prev.det[id] && !prev.det[id].error && prev.h[id] && prev.h[id] === hu.porId[id]) {   // sin cambios: se reutiliza
+        P.det[id] = prev.det[id]; if (prev.fic[id]) P.fic[id] = prev.fic[id]; if (paqObs_(x) && (id in prev.pun)) P.pun[id] = prev.pun[id];
+        if (!paqObs_(x) || (id in prev.pun)) continue;
+      }
       if (Date.now() - t0 > PAQ_MAX_MS) { P.falta = orden.slice(k).map(o => o.id); break; }
+      P.rehechos++;
       try { P.det[id] = paqClon_(typeof detalleCompleto_ === 'function' ? detalleCompleto_(tk, id) : detalle(tk, id)); } catch (e) { P.det[id] = { error: String(e.message || e) }; }
       try { P.fic[id] = paqClon_(ficha(tk, id)); } catch (e) {}
       if (paqObs_(x) && typeof puntosEstado === 'function') try { P.pun[id] = paqClon_(puntosEstado(tk, id)); } catch (e) {}
@@ -141,19 +163,22 @@ function paqGuardar_(clave, txt) {
 const paqGz_ = o => Utilities.base64Encode(Utilities.gzip(Utilities.newBlob(JSON.stringify(o), 'application/json')).getBytes());
 const paqDesGz_ = b => JSON.parse(Utilities.ungzip(Utilities.newBlob(Utilities.base64Decode(b), 'application/x-gzip')).getDataAsString());
 
-/** El paquete común de la versión v: de la caché, o se arma. Si otra persona ya lo está armando, se espera a que termine. */
-function paqComun_(v) {
-  const c = CacheService.getScriptCache(), clave = 'paqc_' + v, flag = 'paqc_armando_' + v;
-  let gz = paqLeer_(clave);
-  if (!gz && c.get(flag)) {
-    const fin = Date.now() + PAQ_MAX_MS + 20000;
-    while (!gz && Date.now() < fin && c.get(flag)) { Utilities.sleep(2000); gz = paqLeer_(clave); }
-  }
+/** El paquete común para la versión v. Nunca deja a Google esperando:
+ *  - si ya está armado para esa versión → ese;
+ *  - si otra consulta lo está armando, o el último se armó hace menos de PAQ_FRESCO_MS → el último (el portal vuelve a pedir después);
+ *  - si no → se arma reutilizando todo lo que no cambió (paqArmarComun_ con el anterior).
+ *  forzar: arma siempre (para el control de calidad). Devuelve null si no hay ninguno y otro lo está armando. */
+function paqComun_(v, forzar) {
+  const c = CacheService.getScriptCache(), flag = 'paqc_armando';
+  let gz = forzar ? null : paqLeer_('paqc_' + v);
   if (gz) return paqDesGz_(gz);
+  const gl = paqLeer_('paqc_ultimo'), ult = gl ? paqDesGz_(gl) : null;
+  if (!forzar && ult && (c.get(flag) || Date.now() - ult.t < PAQ_FRESCO_MS)) return ult;
+  if (!forzar && !ult && c.get(flag)) return null;
   c.put(flag, '1', Math.ceil(PAQ_MAX_MS / 1000) + 30);
   try {
-    const P = paqArmarComun_();
-    if (!P.falta.length) paqGuardar_(clave, paqGz_(P));
+    const P = paqArmarComun_(ult);
+    if (!P.falta.length) { const z = paqGz_(P); paqGuardar_('paqc_' + P.v, z); paqGuardar_('paqc_ultimo', z); }
     return P;
   } finally { c.remove(flag); }
 }
@@ -173,7 +198,7 @@ function paqParaUsuario_(token, C) {
   return paqConMemoria_(() => {
     const u = sesion_(token), lista = paqClon_(misExpedientes(token)) || [];
     const revisa = !!(u.permisos && u.permisos.indexOf('revisar') >= 0);
-    const P = { v: C.v, t: C.t, lista: lista, det: {}, fic: {}, pun: {}, hab: {}, falta: [], tab: null, cal: null, ms: C.ms, armado: C.t };
+    const P = { v: C.v, t: C.t, rehechos: C.rehechos, lista: lista, det: {}, fic: {}, pun: {}, hab: {}, falta: [], tab: null, cal: null, ms: C.ms, armado: C.t };
     lista.forEach(x => {
       const id = x.id;
       if (!(id in C.det)) { P.falta.push(id); return; }
@@ -202,15 +227,18 @@ function paquete(token, vCliente) {
     throw new Error('⚡ El modo instantáneo no está disponible para su usuario. Consulte con Contratos y Cobranzas.');
   const v = verDatos_();
   if (vCliente && String(vCliente) === String(v)) return { igual: true, v: v };
+  const C = paqComun_(v);
+  if (!C) return { armando: true };                                   // otra consulta lo está armando: el portal vuelve a pedir en un rato
+  if (vCliente && String(vCliente) === String(C.v)) return { igual: true, v: C.v, pendiente: C.v !== v };
   const per = Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, (u.permisos || []).join(',') + '|' + u.rol + '|' + (u.como || ''))).slice(0, 12);
-  const clave = 'paq2_' + u.fila + '_' + per + '_' + v;
+  const clave = 'paq2_' + u.fila + '_' + per + '_' + C.v + '_' + C.t;
   let gz = paqLeer_(clave);
   if (!gz) {
-    const P = paqParaUsuario_(token, paqComun_(v));
+    const P = paqParaUsuario_(token, C);
     gz = paqGz_(P);
     if (!P.falta.length) paqGuardar_(clave, gz);
   }
-  return { v: v, gz: gz };
+  return { v: C.v, gz: gz, pendiente: C.v !== v };
 }
 
 /**
@@ -219,7 +247,7 @@ function paquete(token, vCliente) {
  */
 function paqVerificar(token, n) {
   const u = sesion_(token); if (u.rol !== 'ADMIN' && !u.como) throw new Error('Solo la administración.');
-  const P = paqParaUsuario_(token, paqComun_(verDatos_()));
+  const P = paqParaUsuario_(token, paqComun_(verDatos_(), true));
   const ids = Object.keys(P.det).sort((a, b) => (P.pun[b] ? 1 : 0) - (P.pun[a] ? 1 : 0)).slice(0, Math.max(1, Math.min(Number(n) || 10, 40)));
   const revisa = !!(u.permisos && u.permisos.indexOf('revisar') >= 0), dif = [];
   paqConMemoria_(() => {
