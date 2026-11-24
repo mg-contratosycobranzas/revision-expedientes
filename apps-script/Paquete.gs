@@ -194,9 +194,12 @@ function paqParaUsuario_(token, C) {
  * El portal: paquete(token, versionQueTengo).
  * Si su versión sigue vigente → { igual: true, v } (respuesta inmediata).
  * Si no → { v, gz } con el paquete de esa persona en JSON comprimido (gzip, base64).
+ * Solo para la administración o quien tenga el permiso ⚡ "instantaneo" (en "Ver como" rige el permiso de la persona que se ve).
  */
 function paquete(token, vCliente) {
   const u = sesion_(token);
+  if (u.rol !== 'ADMIN' && (u.permisos || []).indexOf('instantaneo') < 0)
+    throw new Error('⚡ El modo instantáneo no está disponible para su usuario. Consulte con Contratos y Cobranzas.');
   const v = verDatos_();
   if (vCliente && String(vCliente) === String(v)) return { igual: true, v: v };
   const per = Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, (u.permisos || []).join(',') + '|' + u.rol + '|' + (u.como || ''))).slice(0, 12);
