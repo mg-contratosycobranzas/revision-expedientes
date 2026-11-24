@@ -1,0 +1,1 @@
+// Vacío: todo este código ya está en Code.gs. Puedes eliminar este archivo.
