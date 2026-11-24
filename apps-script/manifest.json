@@ -1,6 +1,6 @@
 {
-  "version": "2026.11.24-2",
-  "notas": "Abrir expedientes más rápido",
+  "version": "2026.11.24-3",
+  "notas": "Modo instantáneo: paquete de expedientes",
   "archivos": [
     "Ruta",
     "Comisiones",
@@ -12,7 +12,8 @@
     "Files",
     "Plantillas",
     "Avisos",
-    "Rapido"
+    "Rapido",
+    "Paquete"
   ],
   "sha256": {
     "Ruta": "da3a8e6a0cb2692ea12031e285aee5c4fc8447f8fa5d0b684dbe44d333df8ec6",
@@ -25,7 +26,8 @@
     "Files": "64a5ebfaabfc4d30c209013c48f2b304d3d3771811922335fd98e3768f6b2f0f",
     "Plantillas": "26652fa31aa7324599bb4a1f58977b2abe7dd772ed27630e3470d8d84dbf886f",
     "Avisos": "308acb0019908f8880659c005408d28f7b454376656af77ce13050dc77706eb5",
-    "Rapido": "50c82e0b65202c37c3b42c892c9b190be2faa02cd19f8158df8405c474403607"
+    "Rapido": "50c82e0b65202c37c3b42c892c9b190be2faa02cd19f8158df8405c474403607",
+    "Paquete": "d8acb906f765ea4c63a60bd510afb06f0667f264ca0be6087ce7d75f282760fb"
   },
-  "firma": "8b64c26d582e1a2712e25e527c33aecc09bdf3172682a561225677ddb25d889f"
+  "firma": "8d72ad4dee58eccd98572658c885fc3026ee4b0fcbc14a86d711519827763cc6"
 }
