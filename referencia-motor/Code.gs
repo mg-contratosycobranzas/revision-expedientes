@@ -705,7 +705,8 @@ function subsanar(token, id, item, texto, adjunto) {
     log_(u.nombre, 'SUBSANACION', id + ' · ' + item + ' · ' + areas.join('+') + (fuera ? ' · FUERA DE PLAZO' : ''));
   } finally { lock.releaseLock(); }
   const correos = para.map(c => c.correo).filter(c => /@/.test(c));
-  try { if (!cc) MailApp.sendEmail(correos.length ? correos.join(',') : admins_(), 'Subsanación recibida (' + areas.join(' + ') + '): ' + id, u.nombre + ' subsanó ' + id + ' (' + item + '):\n\n' + texto); } catch (e) {}
+  const ref = typeof expRef_ === 'function' ? expRef_(det.exp) : id;
+  try { if (!cc) MailApp.sendEmail(correos.length ? correos.join(',') : admins_(), 'Subsanación recibida (' + areas.join(' + ') + '): ' + ref, u.nombre + ' subsanó ' + ref + ' (' + item + '):\n\n' + texto); } catch (e) {}
   return { areas: areas, contactos: para.filter(c => c.wa || c.correo).map(c => ({ nombre: c.nombre, wa: c.wa, correo: c.correo })), fueraPlazo: fuera, plazo: txtPlazo };
 }
 
