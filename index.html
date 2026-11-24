@@ -244,22 +244,25 @@ function confeti(){const c=$('#cv'),x=c.getContext('2d');c.width=innerWidth;c.he
 const TMP_K='mgTiempos',tiempo=(fn,ms,ok)=>{try{const l=JSON.parse(localStorage.getItem(TMP_K)||'[]');l.push([fn,Math.round(ms),Date.now(),ok?1:0]);localStorage.setItem(TMP_K,JSON.stringify(l.slice(-300)))}catch(e){}};
 /* ⚡ MODO INSTANTÁNEO: el motor arma un "paquete" con todo lo que la persona puede ver (lista, detalle, ficha, puntos,
    habilitación). Se guarda en este equipo y abrir un expediente ya no consulta a Google. Se actualiza solo en segundo plano. */
-let PAQ=null,PAQ_ON=null,PAQ_SYNC=null,PAQ_ERR='',PAQ_SUC={};
+let PAQ=null,PAQ_ON=null,PAQ_SYNC=null,PAQ_ERR='',PAQ_SUC={},PAQ_OV={},PAQ_ULT=0,PAQ_TT=null,PAQ_RT=null;const PAQ_MARGEN=5*60e3;
 const PAQ_K=()=>'mgPaq_'+(U&&U.nombre||''),PAQ_LEER=/^(yo|misExpedientes|calendario|puntosTablero|filesFuera|fileUbic|detalle|ficha|detalleRapido|fichaRapida|puntosEstado|habEstado|paquete|opciones|ventas|historial|tiemposSubsanacion|sistemaEstado|perfilAbrir|plantillasLista|habPendientes|habExcLista|ayudaGuias|rutaOpciones|rutaBandeja|rutaPanel|rutaMias|rutaDeExp|registro|accesos|buzonLista|avisosConfig|avisosVista|checklistDatos|cargoDatos|cargosLista|comisiones|misComisiones|miAvance|reporteInterno)$/;
 const instOn=()=>{if(PAQ_ON===false||!U)return false;let f=null;try{f=localStorage.getItem('mgInst')}catch(e){}return U.rol==='ADMIN'?f==='1':(can('instantaneo')&&f!=='0')};
 async function gunzip64(b){const bin=Uint8Array.from(atob(b),c=>c.charCodeAt(0));const st=new Blob([bin]).stream().pipeThrough(new DecompressionStream('gzip'));return JSON.parse(await new Response(st).text())}
 async function paqCarga(){if(PAQ||!U)return PAQ;try{const z=localStorage.getItem(PAQ_K());if(z){const o=JSON.parse(z),P=await gunzip64(o.gz);P.v=o.v;P.rec=o.t;PAQ=P}}catch(e){}return PAQ}
-function paqSync(){if(PAQ_SYNC)return PAQ_SYNC;const ini=Date.now();PAQ_SYNC=(async()=>{try{await paqCarga();const r=await call('paquete',T,PAQ&&PAQ.v||'');
+function paqSync(forzar){if(PAQ_SYNC)return PAQ_SYNC;if(!forzar&&Date.now()-PAQ_ULT<60e3)return Promise.resolve(false);PAQ_ULT=Date.now();const ini=Date.now();PAQ_SYNC=(async()=>{try{await paqCarga();const r=await call('paquete',T,PAQ&&PAQ.v||'');
+  const otraVez=ms=>{clearTimeout(PAQ_RT);PAQ_RT=setTimeout(()=>{if(T&&instOn())paqSync(true).then(c=>{if(c&&PAQ.lista&&!$('#mod').classList.contains('on')){ANU=PAQ.lista.filter(x=>x.anulado);DATA=PAQ.lista.filter(x=>!x.anulado);cacheGuarda();pintarExp();pintarInicio()}})},ms)};
+  if(r.armando){PAQ_ERR='';otraVez(45e3);return false}   // el motor lo está armando: se vuelve a pedir en 45 s (sin hacer esperar a Google)
+  if(r.pendiente)otraVez(100e3);   // llegó el último armado; hay un cambio más nuevo que se pedirá luego
   if(r.igual){if(PAQ)PAQ.rec=Date.now();return false}
   const P=await gunzip64(r.gz);P.v=r.v;P.rec=Date.now();P.dur=Date.now()-ini;PAQ=P;PAQ_ON=true;PAQ_ERR='';
-  Object.keys(PAQ_SUC).forEach(id=>{if(PAQ_SUC[id]<ini)delete PAQ_SUC[id]});   // lo guardado antes de pedir el paquete ya viene incluido
+  const pt=P.t||0;Object.keys(PAQ_SUC).forEach(id=>{if(PAQ_SUC[id]+PAQ_MARGEN<pt)delete PAQ_SUC[id]});Object.keys(PAQ_OV).forEach(id=>{if(PAQ_OV[id].t+PAQ_MARGEN<pt)delete PAQ_OV[id]});   // lo guardado aquí vale hasta que llegue un paquete armado después
   if(P.tab){PT=P.tab;PTT=Date.now()}if(P.cal)CAL=P.cal;
   try{localStorage.setItem(PAQ_K(),JSON.stringify({v:r.v,gz:r.gz,t:Date.now()}))}catch(e){}return true}
  catch(e){PAQ_ERR=e.message;if(/no permitida|no disponible|no está disponible/i.test(e.message))PAQ_ON=false;return false}finally{PAQ_SYNC=null}})();return PAQ_SYNC}
 /* dato del paquete para un expediente (undefined = no está: se consulta a Google como siempre) */
-function pq(tipo,id){if(!instOn()||!PAQ||PAQ_SUC[id]||!PAQ[tipo]||!(id in PAQ[tipo]))return undefined;const v=PAQ[tipo][id];if(v&&v.error)return undefined;return v==null?v:JSON.parse(JSON.stringify(v))}
+function pq(tipo,id){if(!instOn())return undefined;const ov=PAQ_OV[id];if(ov&&ov[tipo]!==undefined)return ov[tipo]==null?ov[tipo]:JSON.parse(JSON.stringify(ov[tipo]));if(!PAQ||PAQ_SUC[id]||!PAQ[tipo]||!(id in PAQ[tipo]))return undefined;const v=PAQ[tipo][id];if(v&&v.error)return undefined;return v==null?v:JSON.parse(JSON.stringify(v))}
 /* al guardar algo de un expediente, ese expediente deja de leerse del paquete hasta la siguiente actualización */
-function paqTocar(fn,args){if(!PAQ||PAQ_LEER.test(fn))return;args.forEach(a=>{if(typeof a==='string'&&/^EXP-/i.test(a))PAQ_SUC[a]=Date.now()});if(instOn())setTimeout(()=>paqSync().then(c=>{if(c&&PAQ.lista){ANU=PAQ.lista.filter(x=>x.anulado);DATA=PAQ.lista.filter(x=>!x.anulado);cacheGuarda();pintarExp();pintarInicio()}}),1500)}
+function paqTocar(fn,args){if(!PAQ||PAQ_LEER.test(fn))return;args.forEach(a=>{if(typeof a==='string'&&/^EXP-/i.test(a))PAQ_SUC[a]=Date.now()});if(instOn()){clearTimeout(PAQ_TT);PAQ_TT=setTimeout(()=>paqSync(true).then(c=>{if(c&&PAQ.lista&&!$('#mod').classList.contains('on')){ANU=PAQ.lista.filter(x=>x.anulado);DATA=PAQ.lista.filter(x=>!x.anulado);cacheGuarda();pintarExp();pintarInicio()}}),100e3)}}   // el paquete completo se pide 100 s después del último guardado; ese expediente se trae solo enseguida
 /* ⚡ GUARDADO INSTANTÁNEO (con el modo instantáneo): se muestra guardado al momento y se envía a Google por detrás, en orden.
    Si Google lo rechaza, aparece un aviso rojo que no se va solo. Si se cierra el portal antes de enviarlo, al volver pregunta si enviarlo. */
 const FONDO=[];let FONDO_ON=false;const FONDO_K=()=>'mgFondo_'+(U&&U.nombre||'');
@@ -280,7 +283,7 @@ function guardaFondo(fn,args,etq,prevista,ok){if(!instOn())return call(fn,T,...a
 /* después de guardar: trae ese expediente fresco y lo deja listo en el paquete (para que al reabrirlo también sea instantáneo) */
 async function paqRefrescaId(id){if(!instOn()||!PAQ||FONDO.some(i=>i.id===id))return;const t0=Date.now();const x=(DATA||[]).find(z=>z.id===id),nec=!x||['OBSERVADO','SUBSANADO'].includes(x.estado),rv=!SALES.includes(U.rol)&&can('revisar');
  try{const [d,f,pu,h]=await Promise.all([callR('detalleRapido','detalle',T,id),rv?callR('fichaRapida','ficha',T,id).catch(()=>undefined):undefined,nec?call('puntosEstado',T,id).catch(()=>undefined):undefined,nec?call('habEstado',T,id).catch(()=>undefined):undefined]);
-  if(!PAQ||(PAQ_SUC[id]||0)>t0||FONDO.some(i=>i.id===id))return;PAQ.det[id]=d;if(f!==undefined)PAQ.fic[id]=f;if(pu!==undefined)PAQ.pun[id]=pu;if(h!==undefined)PAQ.hab[id]=h;delete PAQ_SUC[id]}catch(e){}}
+  if((PAQ_SUC[id]||0)>t0||FONDO.some(i=>i.id===id))return;PAQ_OV[id]={t:t0,det:d,fic:f,pun:pu,hab:h};delete PAQ_SUC[id]}catch(e){}}
 window.addEventListener('beforeunload',e=>{if(FONDO.length){e.preventDefault();e.returnValue='Hay cambios guardándose'}});
 /* al entrar: si quedó algo sin enviar (se cerró el portal), se pregunta */
 function fondoPendiente(){let l=[];try{l=JSON.parse(localStorage.getItem(FONDO_K())||'[]')}catch(e){}l=l.filter(i=>Date.now()-i.t<24*3600e3);if(!l.length||FONDO.length)return;
@@ -561,7 +564,7 @@ async function instUI(){if(!U||U.rol!=='ADMIN')return;const m=$('#mod'),s=$('#sh
   <p class="mut hint">Al guardar una revisión ya no esperas: se ve guardada al instante y se envía a Google por detrás (abajo verás “⏳ Guardando…”). Si Google la rechaza, sale un aviso rojo.<br>Para el equipo: actívalo por persona en 👥 Accesos → ⚙️ → <b>⚡ Modo instantáneo</b>. Si alguien cambia algo directo en el Sheet, aparece unos minutos después.</p>`;
   $('#inX').onclick=()=>m.classList.remove('on');
   $('#inOn').onchange=e=>{try{localStorage.setItem('mgInst',e.target.checked?'1':'0')}catch(z){}PAQ_ON=null;if(e.target.checked){paqSync().then(()=>pinta(PAQ_ERR?'':'<div class="tip" style="border-left-color:var(--ok);margin-top:10px">✅ Paquete listo.</div>'));setTimeout(()=>pinta(),50)}else pinta()};
-  $('#inYa').onclick=()=>{paqSync().then(()=>pinta());setTimeout(()=>pinta(),50)};
+  $('#inYa').onclick=()=>{paqSync(true).then(()=>pinta());setTimeout(()=>pinta(),50)};
   $('#inVe').onclick=async()=>{const b=$('#inVe');b.disabled=true;b.textContent='⏳ Comparando…';$('#inR').innerHTML='<p class="mut">Comparo 15 expedientes abiertos de la forma normal con lo que trae el paquete. Puede tardar de 1 a 4 minutos.</p><div id="inT" class="mut">⏳ Comparando… <b>0 s</b></div>';contador('#inT','Comparando');
    try{const r=await call('paqVerificar',T,15);if(!$('#inR'))return;$('#inR').innerHTML=r.diferencias?`<div class="dupbox"><b>⚠️ ${r.diferencias} diferencia${r.diferencias>1?'s':''} en ${r.revisados} expedientes</b><br><small>Copia esto y envíalo:</small><textarea style="width:100%;height:120px;font-size:11px">${esc(JSON.stringify(r.ejemplos,null,1))}</textarea></div>`:`<div class="tip" style="border-left-color:var(--ok)"><b>✅ Todo coincide</b><br><small>${r.revisados} expedientes de ${esc(r.usuario)}: el paquete da exactamente lo mismo que abrirlos normal.</small></div>`}
    catch(e){if($('#inR'))$('#inR').innerHTML=`<div class="dupbox">${esc(e.message)}</div>`}if($('#inVe')){b.disabled=false;b.textContent='🔍 Verificar que coincide'}};
