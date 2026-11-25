@@ -222,7 +222,7 @@ nav button{font-weight:600}.kpi b{font-size:22px;font-weight:700}.tw table{font-
  <button class="act" id="bDrive"><i>☁️</i>Guardar en Drive<small>también cada semana, solo</small></button></div></section>
 
 <section id="tAyuda" class="hide"></section>
-</main><p class="foot">Cuadro de Revisiones · Diseñado por el área de <b>Contratos y Cobranzas</b></p></div>
+</main><p class="foot">Cuadro de Revisiones · Diseñado por el área de <b>Contratos y Cobranzas</b> · <a href="#" id="bDiag" style="color:inherit">🩺 Diagnóstico</a></p></div>
 
 <div class="modal" id="mod"><div class="sheet" id="sheet"></div></div><div class="toast" id="toast"></div><canvas id="cv"></canvas>
 <script src="config.js"></script>
@@ -598,6 +598,33 @@ async function instUI(){if(!U||U.rol!=='ADMIN')return;const m=$('#mod'),s=$('#sh
   $('#inPr').onclick=()=>{const ids=Object.keys(PAQ.det).slice(0,20),t0=performance.now();ids.forEach(id=>{pq('det',id);pq('fic',id);pq('pun',id);pq('hab',id)});const ms=performance.now()-t0;
    $('#inR').innerHTML=`<div class="tip" style="border-left-color:var(--ok)"><b>${ids.length} expedientes abiertos en ${ms<1000?Math.round(ms)+' ms':(ms/1000).toFixed(1)+' s'}</b><br><small>Antes: unos ${ids.length*20} s (20 s cada uno).</small></div>`}};
  pinta('',1);if(instOn()&&!PAQ_SYNC){paqSync().then(()=>pinta());setTimeout(()=>pinta(),50)}}
+/* 🩺 DIAGNÓSTICO (cualquier usuario): conexión, ⚡ modo instantáneo y tiempos reales de ESTE equipo, para enviarlo a Contratos */
+async function diagUI(){const m=$('#mod'),s=$('#sheet');m.classList.add('on');
+ const cab=`<div style="display:flex;justify-content:space-between;gap:8px"><div><h2>🩺 Diagnóstico de velocidad</h2><div class="mut">De este equipo · ${esc(U.nombre)}</div></div><button class="ib" style="background:var(--soft);color:var(--ink);border:0" id="dgX" aria-label="Cerrar">✕</button></div>`;
+ s.innerHTML=cab+'<p class="mut">⏳ Midiendo la conexión con Google (3 pruebas cortas)…</p><div class="skel"></div>';$('#dgX').onclick=()=>m.classList.remove('on');
+ const pr=[];for(let i=0;i<3;i++){const t0=performance.now();let ok=true;try{await call('yo',T)}catch(e){ok=false}pr.push([performance.now()-t0,ok])}if(!$('#dgX'))return;
+ const cn=navigator.connection||{},sg=ms=>(ms/1000).toFixed(1)+' s',med=a=>{const b=a.slice().sort((x,y)=>x-y);return b.length?b[Math.floor(b.length/2)]:0};
+ let L=[];try{L=JSON.parse(localStorage.getItem(TMP_K)||'[]')}catch(e){}const ult=L.slice(-15).reverse(),g={};L.slice(-150).forEach(([f,ms])=>(g[f]=g[f]||[]).push(ms));
+ const peor=Object.keys(g).map(f=>({f,n:g[f].length,m:med(g[f])})).sort((a,b)=>b.m-a.m).slice(0,6),pm=med(pr.filter(x=>x[1]).map(x=>x[0]));
+ const ins=instOn(),perm=U.rol==='ADMIN'||can('instantaneo'),pq=PAQ?Object.keys(PAQ.det||{}).length:0,hace=PAQ&&PAQ.rec?Math.round((Date.now()-PAQ.rec)/60e3):null;
+ let sw='';try{const k=await caches.keys();sw=k.join(', ')}catch(e){sw='—'}
+ const diag=[];if(!perm)diag.push('⚡ No tiene el permiso “Modo instantáneo”: cada expediente se pide a Google (10–20 s). Actívalo en Accesos → ⚙️.');
+  else if(!ins)diag.push('⚡ Tiene el permiso pero el modo está apagado en este equipo.');else if(!pq)diag.push('⚡ El modo está activo pero el paquete aún no llegó a este equipo.');
+  if(pm>6000)diag.push('📶 La conexión con Google está lenta ('+sg(pm)+' por consulta). Revisar el wifi.');if(pr.some(x=>!x[1]))diag.push('📡 Alguna prueba falló: la conexión se corta.');
+  if(FONDO.length)diag.push('⏳ Hay '+FONDO.length+' guardado(s) esperando enviarse.');if(!diag.length)diag.push('✅ No se ve un problema en este equipo.');
+ const txt=['Diagnóstico · '+U.nombre+' · '+new Date().toLocaleString('es-PE'),'Navegador: '+navigator.userAgent.replace(/\s+/g,' ').slice(0,140),
+  'Conexión: '+(cn.effectiveType||'?')+(cn.downlink?' · '+cn.downlink+' Mbps':'')+(cn.rtt?' · rtt '+cn.rtt+' ms':''),'Prueba con Google: '+pr.map(x=>x[1]?sg(x[0]):'falló').join(' / '),
+  '⚡ Permiso: '+(perm?'sí':'no')+' · activo: '+(ins?'sí':'no')+' · paquete: '+pq+' expedientes'+(hace!=null?' (hace '+hace+' min)':'')+(PAQ_ERR?' · error: '+PAQ_ERR:''),
+  'Versión guardada: '+sw,'Diagnóstico: '+diag.join(' | '),'Lo más lento (mediana): '+peor.map(x=>x.f+' '+sg(x.m)+' ×'+x.n).join(', '),
+  'Últimas consultas: '+ult.map(([f,ms,t,ok])=>f+' '+sg(ms)+(ok?'':' ✗')).join(', ')].join('\n');
+ s.innerHTML=cab+`<div class="tip" style="border-left-color:${diag[0].startsWith('✅')?'var(--ok)':'var(--warn)'};margin-top:10px">${diag.map(d=>'<div>'+esc(d)+'</div>').join('')}</div>
+  <div class="chk"><span style="flex:1">📶 Conexión con Google<br><small class="mut">${pr.map(x=>x[1]?sg(x[0]):'falló').join(' · ')}${cn.effectiveType?' · red '+esc(cn.effectiveType)+(cn.downlink?' '+cn.downlink+' Mbps':''):''}</small></span><b style="color:${pm<3000?'var(--ok)':pm<6000?'var(--warn)':'var(--bad)'}">${sg(pm)}</b></div>
+  <div class="chk"><span style="flex:1">⚡ Modo instantáneo<br><small class="mut">${perm?'Con permiso':'Sin permiso'} · ${ins?'activo':'apagado'} · ${pq} expedientes en el equipo${hace!=null?' · actualizado hace '+hace+' min':''}</small></span><b>${ins&&pq?'✅':'⚠️'}</b></div>
+  ${peor.length?`<div class="sec-t">⏱️ Lo más lento en este equipo</div>${peor.map(x=>`<div class="miss"><span>${esc(x.f)} <small class="mut">×${x.n}</small></span><b style="color:${x.m<3000?'var(--ok)':x.m<8000?'var(--warn)':'var(--bad)'}">${sg(x.m)}</b></div>`).join('')}`:''}
+  <p style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><button class="btn ok" id="dgC">📋 Copiar para enviar</button><button class="btn sec" id="dgR">🔄 Medir otra vez</button></p>
+  <p class="mut hint">Copia el resultado y envíalo por WhatsApp o correo a Contratos y Cobranzas.</p>`;
+ $('#dgX').onclick=()=>m.classList.remove('on');$('#dgR').onclick=diagUI;$('#dgC').onclick=()=>{try{navigator.clipboard.writeText(txt).then(()=>toast('📋 Copiado: pégalo en WhatsApp o en un correo'))}catch(e){prompt('Copia este texto:',txt)}}}
+document.addEventListener('click',e=>{if(e.target&&e.target.id==='bDiag'){e.preventDefault();if(T)diagUI()}});
 async function saludUI(){if(!U||U.rol!=='ADMIN'){toast('Solo la administración puede ver el estado del sistema',1);return}const m=$('#mod'),s=$('#sheet');m.classList.add('on');
  s.innerHTML=`<div style="display:flex;justify-content:space-between;gap:8px"><div><h2>🩺 Estado del sistema</h2><div class="mut" id="sdV">Revisando…</div></div><button class="ib" style="background:var(--soft);color:var(--ink);border:0" id="sdX" aria-label="Cerrar">✕</button></div><div id="sdB" style="margin:10px 0"><div class="mut" id="sdP">Probando 0 de ${SONDAS.length} funciones…</div><div style="height:8px;background:var(--soft);border-radius:9px;overflow:hidden;margin-top:6px"><div id="sdG" style="height:100%;width:0;background:var(--ok);transition:width .2s"></div></div></div><div id="sdR"></div>`;
  $('#sdX').onclick=()=>m.classList.remove('on');
