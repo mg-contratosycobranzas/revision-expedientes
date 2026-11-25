@@ -20,7 +20,7 @@
  */
 try {
   if (PERMISOS.indexOf('instantaneo') < 0) PERMISOS.push('instantaneo');   // ⚡ se habilita por persona en Accesos
-  ['paquete', 'paqVerificar'].forEach(f => {
+  ['paquete', 'paqVerificar', 'dnisVisibles'].forEach(f => {
     if (API_PUBLICA.indexOf(f) < 0) API_PUBLICA.push(f);
     if (SOLO_LECTURA.indexOf(f) < 0) SOLO_LECTURA.push(f);
   });
@@ -260,4 +260,22 @@ function paqVerificar(token, n) {
     });
   });
   return { revisados: ids.length, diferencias: dif.length, ejemplos: dif.slice(0, 5), usuario: u.nombre, armado: P.ms };
+}
+
+/**
+ * 🔎 Buscar por DNI: { "EXP-2026-171": "06832717", ... } solo de los expedientes que la persona puede ver.
+ * El DNI del titular sale de BASE MAESTRA (columna I). Solo lee.
+ */
+function dnisVisibles(token) {
+  const u = sesion_(token), ids = {}, out = {};
+  (misExpedientes(token) || []).forEach(x => ids[x.id] = 1);
+  let bm = null;
+  if (typeof aviBM_ === 'function') try { bm = aviBM_(); } catch (e) {}
+  if (!bm) {
+    bm = {};
+    ss_().getSheetByName(HOJA_BM).getRange(PRIMERA_FILA, 1, ULTIMA_FILA - PRIMERA_FILA + 1, 9).getDisplayValues()
+      .forEach(r => { const id = String(r[0]).trim(); if (id) bm[id] = { dni: String(r[8]).trim() }; });
+  }
+  Object.keys(ids).forEach(id => { const d = bm[id] && bm[id].dni; if (d) out[id] = d; });
+  return out;
 }
