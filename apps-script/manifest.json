@@ -1,6 +1,6 @@
 {
-  "version": "2026.11.24-7",
-  "notas": "Correos con identificación completa del expediente",
+  "version": "2026.11.25-1",
+  "notas": "Buscar por DNI",
   "archivos": [
     "Ruta",
     "Comisiones",
@@ -27,7 +27,7 @@
     "Plantillas": "26652fa31aa7324599bb4a1f58977b2abe7dd772ed27630e3470d8d84dbf886f",
     "Avisos": "95c43b288b70f15c98f27f82a0eded766ac536a547e0dde1f3a3d120fdf19747",
     "Rapido": "50c82e0b65202c37c3b42c892c9b190be2faa02cd19f8158df8405c474403607",
-    "Paquete": "89dab3518ed826cf2df36364eb18184bf35d91e1ee2384ff2c066ddc1fc458bf"
+    "Paquete": "0b2ed5a06da0d34e3419b4cac31ecfa1a231fcc59b3e451fd75ca38214f40198"
   },
-  "firma": "a2d503abc18050285f9d2fa364d89fc9836245514fdb1e4d7b78f67b6aa6e947"
+  "firma": "63614b8db3ca3f8f2e68d40510771bde0f735c801c8dc737ced27d285011d068"
 }
