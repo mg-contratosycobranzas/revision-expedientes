@@ -276,11 +276,27 @@ function fondoError(it,msg){let b=$('#fondoB');if(!b){b=document.createElement('
  $('#fbA').onclick=()=>{b.remove();abrir(it.id)};$('#fbR').onclick=()=>{b.remove();FONDO.push(it);fondoLS();fondoCorre()};$('#fbX').onclick=()=>b.remove();vib([60,60,60])}
 async function fondoCorre(){if(FONDO_ON)return;FONDO_ON=true;fondoUI();
  while(FONDO.length){const it=FONDO[0];try{const rr=await call(it.fn,T,...it.args);FONDO.shift();fondoLS();toast('✅ Guardado en Google · '+it.etq);if(it.ok)try{it.ok(rr)}catch(z){}paqRefrescaId(it.id)}
-  catch(e){if(/Sin conexión/.test(e.message)&&(it.n=(it.n||0)+1)<6){fondoUI();await new Promise(z=>setTimeout(z,4000*it.n));continue}FONDO.shift();fondoLS();PAQ_SUC[it.id]=Date.now();fondoError(it,e.message)}fondoUI()}
+  catch(e){if(/Sin conexión/.test(e.message)&&(it.n=(it.n||0)+1)<6){fondoUI();await new Promise(z=>setTimeout(z,4000*it.n));continue}FONDO.shift();fondoLS();
+   if(/No hay cambios para guardar/i.test(e.message)){toast('ℹ️ '+it.etq+': en el Sheet ya estaba así, no hubo nada que cambiar');PAQ_SUC[it.id]=Date.now();paqRefrescaId(it.id);fondoUI();continue}
+   PAQ_SUC[it.id]=Date.now();fondoError(it,e.message)}fondoUI()}
  FONDO_ON=false;fondoUI()}
 /* envía en segundo plano y devuelve al instante el resultado previsto (sin modo instantáneo: espera a Google como siempre) */
 function guardaFondo(fn,args,etq,prevista,ok){if(!instOn())return call(fn,T,...args);const id=args[0];PAQ_SUC[id]=Date.now();FONDO.push({fn,args,etq,id,t:Date.now(),ok});fondoLS();fondoCorre();return Promise.resolve(Object.assign({_prev:true},prevista))}
 /* después de guardar: trae ese expediente fresco y lo deja listo en el paquete (para que al reabrirlo también sea instantáneo) */
+/* ⚡ el expediente se muestra al instante desde el paquete y aquí se confirma con Google que esté al día.
+   Si cambió (p. ej. alguien editó el Sheet) y no se ha tocado nada → se vuelve a mostrar con lo último. Si ya se empezó a editar → aviso. */
+const REVAL={};
+const firmaDet=d=>d?JSON.stringify([d.exp&&[d.exp.estado,d.exp.sbs,d.exp.ctr,d.exp.obsSbs,d.exp.obsCtr],(d.items||[]).map(i=>[i.area,i.col,i.estado]),(d.historial||[]).map(h=>[h.fecha,h.texto,h.estado])]):'';
+const firmaFic=f=>f?JSON.stringify(['CIERRE','SBS'].map(a=>{const x=f[a];if(!x||x.oculto)return a;return [a,(x.campos||[]).map(c=>c.col+'='+c.valor),['obs','estado','revisor','nrev'].map(k=>x[k]&&x[k].valor)]})):'';
+async function revalidar(id){if(REVAL[id]&&Date.now()-REVAL[id]<45e3)return;REVAL[id]=Date.now();
+ const vd=pq('det',id),vf=pq('fic',id),rv=!SALES.includes(U.rol)&&can('revisar');let d,f;
+ try{[d,f]=await Promise.all([callR('detalleRapido','detalle',T,id),rv?callR('fichaRapida','ficha',T,id).catch(()=>undefined):undefined])}catch(e){return}
+ const cd=firmaDet(d)!==firmaDet(vd),cf=f!==undefined&&firmaFic(f)!==firmaFic(vf);if(!cd&&!cf)return;
+ const o=PAQ_OV[id]||{};PAQ_OV[id]=Object.assign({},o,{t:Date.now(),det:d,fic:f!==undefined?f:o.fic});
+ const abierto=$('#mod').classList.contains('on')&&$('#sheet h2')&&String(($('#sheet .mut')||{}).textContent||'').includes(id);if(!abierto)return;
+ const ae=document.activeElement,tocado=$$('#sheet select[data-a]').some(x=>!x.dataset.sync&&x.value!==x.dataset.i)||$$('#sheet [data-x]').some(x=>String(x.value||'').trim()!==String(x.dataset.i||'').trim())||!!($('#rvTxt')&&$('#rvTxt').value.trim())||!!(ae&&$('#sheet').contains(ae)&&/INPUT|TEXTAREA/.test(ae.tagName));
+ if(tocado){toast('⚠️ Este expediente cambió en el Sheet mientras lo revisabas. Antes de guardar, ciérralo y ábrelo de nuevo para ver lo último.',1);return}
+ toast('🔄 Actualizado con lo último del Sheet');abrir(id)}
 async function paqRefrescaId(id){if(!instOn()||!PAQ||FONDO.some(i=>i.id===id))return;const t0=Date.now();const x=(DATA||[]).find(z=>z.id===id),nec=!x||['OBSERVADO','SUBSANADO'].includes(x.estado),rv=!SALES.includes(U.rol)&&can('revisar');
  try{const [d,f,pu,h]=await Promise.all([callR('detalleRapido','detalle',T,id),rv?callR('fichaRapida','ficha',T,id).catch(()=>undefined):undefined,nec?call('puntosEstado',T,id).catch(()=>undefined):undefined,nec?call('habEstado',T,id).catch(()=>undefined):undefined]);
   if((PAQ_SUC[id]||0)>t0||FONDO.some(i=>i.id===id))return;PAQ_OV[id]={t:t0,det:d,fic:f,pun:pu,hab:h};delete PAQ_SUC[id]}catch(e){}}
@@ -1040,7 +1056,7 @@ let RAPIDO=null;   // ⚡ detalleRapido / fichaRapida (Rapido.gs): null = no se 
 async function callR(rapida,normal,...a){if(RAPIDO!==false){try{const r=await call(rapida,...a);RAPIDO=true;return r}catch(e){if(!/Operación no permitida|no disponible/i.test(e.message))throw e;RAPIDO=false}}return call(normal,...a)}
 async function abrir(id){const m=$('#mod'),s=$('#sheet');s.innerHTML='<div class="skel"></div><div class="skel"></div>';m.classList.add('on');ADJ=null;const xd=DATA.find(z=>z.id===id),nec=!xd||['OBSERVADO','SUBSANADO'].includes(xd.estado);   // ⚡ aprobado o pendiente: no hace falta pedir puntos ni habilitación
  const pP=nec?(pq('pun',id)!==undefined?Promise.resolve(pq('pun',id)):call('puntosEstado',T,id)):Promise.resolve([]);pP.catch(()=>{});const pH=nec?(pq('hab',id)!==undefined?Promise.resolve(pq('hab',id)):call('habEstado',T,id)):Promise.resolve(null);pH.catch(()=>{});const pF=!SALES.includes(U.rol)&&can('revisar')?(pq('fic',id)!==undefined?Promise.resolve(pq('fic',id)):callR('fichaRapida','ficha',T,id)):null;if(pF)pF.catch(()=>{});   // la ficha se pide a la vez que el detalle
- if(FONDO.some(i=>i.id===id))toast('⏳ Tu último cambio de este expediente aún se está guardando en Google');try{const d=pq('det',id)||await callR('detalleRapido','detalle',T,id),x=d.exp,st=v=>v==='APROBADO'?'ok':v==='OBSERVADO'?'bad':'warn';
+ if(FONDO.some(i=>i.id===id))toast('⏳ Tu último cambio de este expediente aún se está guardando en Google');if(instOn()&&pq('det',id)!==undefined)setTimeout(()=>revalidar(id),300);try{const d=pq('det',id)||await callR('detalleRapido','detalle',T,id),x=d.exp,st=v=>v==='APROBADO'?'ok':v==='OBSERVADO'?'bad':'warn';
  // observación de cada área con su estado como resumen (🔴 Observado / ✅ Aprobado)
 const estP=v=>{const n=String(v||'').toUpperCase();return n==='OBSERVADO'?' <span class="pill OBSERVADO" style="font-size:10px;padding:1px 7px">🔴 Observado</span>':n==='APROBADO'?' <span class="pill COMPLETO" style="font-size:10px;padding:1px 7px">✅ Aprobado</span>':''};
 const chat=[];if(x.obsSbs||String(x.sbs).toUpperCase()==='OBSERVADO')chat.push(`<div class="bub l"><small><b>SBS</b>${estP(x.sbs)}</small>${msgHtml(x.obsSbs||'Estado observado')}</div>`);if(x.obsCtr||String(x.ctr).toUpperCase()==='OBSERVADO')chat.push(`<div class="bub l"><small><b>Contractual</b>${estP(x.ctr)}</small>${msgHtml(x.obsCtr||'Estado observado')}</div>`);
