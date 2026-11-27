@@ -1,0 +1,2 @@
+pdf.js (pdfjs-dist 4.10.38, legacy build) de Mozilla, licencia Apache 2.0 (ver LICENSE).
+Se usa solo para leer el texto del Estado de cuenta de Evolta en Nueva venta; se carga cuando alguien sube un PDF.
