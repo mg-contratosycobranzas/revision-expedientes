@@ -289,11 +289,10 @@ function guardaFondo(fn,args,etq,prevista,ok){if(!instOn())return call(fn,T,...a
 const REVAL={};
 const firmaDet=d=>d?JSON.stringify([d.exp&&[d.exp.estado,d.exp.sbs,d.exp.ctr,d.exp.obsSbs,d.exp.obsCtr],(d.items||[]).map(i=>[i.area,i.col,i.estado]),(d.historial||[]).map(h=>[h.fecha,h.texto,h.estado])]):'';
 const firmaFic=f=>f?JSON.stringify(['CIERRE','SBS'].map(a=>{const x=f[a];if(!x||x.oculto)return a;return [a,(x.campos||[]).map(c=>c.col+'='+c.valor),['obs','estado','revisor','nrev'].map(k=>x[k]&&x[k].valor)]})):'';
-async function revalidar(id){if(REVAL[id]&&Date.now()-REVAL[id]<45e3)return;REVAL[id]=Date.now();
- const vd=pq('det',id),vf=pq('fic',id),rv=!SALES.includes(U.rol)&&can('revisar');let d,f;
- try{[d,f]=await Promise.all([callR('detalleRapido','detalle',T,id),rv?callR('fichaRapida','ficha',T,id).catch(()=>undefined):undefined])}catch(e){return}
- const cd=firmaDet(d)!==firmaDet(vd),cf=f!==undefined&&firmaFic(f)!==firmaFic(vf);if(!cd&&!cf)return;
- const o=PAQ_OV[id]||{};PAQ_OV[id]=Object.assign({},o,{t:Date.now(),det:d,fic:f!==undefined?f:o.fic});
+async function revalidar(id){if(!PAQ||Date.now()-(PAQ.rec||0)<90e3)return;if(REVAL[id]&&Date.now()-REVAL[id]<90e3)return;REVAL[id]=Date.now();
+ // ⚡ una sola consulta liviana: "¿cambió algo desde mi paquete?". Si no cambió, termina aquí (antes se pedían el detalle y la ficha completos en cada apertura)
+ const vd=pq('det',id),vf=pq('fic',id);let c=false;try{c=await paqSync(true)}catch(e){return}if(!c||PAQ_OV[id])return;
+ const d=pq('det',id),f=pq('fic',id);if(firmaDet(d)===firmaDet(vd)&&firmaFic(f)===firmaFic(vf))return;
  const abierto=$('#mod').classList.contains('on')&&$('#sheet h2')&&String(($('#sheet .mut')||{}).textContent||'').includes(id);if(!abierto)return;
  const ae=document.activeElement,tocado=$$('#sheet select[data-a]').some(x=>!x.dataset.sync&&x.value!==x.dataset.i)||$$('#sheet [data-x]').some(x=>String(x.value||'').trim()!==String(x.dataset.i||'').trim())||!!($('#rvTxt')&&$('#rvTxt').value.trim())||!!(ae&&$('#sheet').contains(ae)&&/INPUT|TEXTAREA/.test(ae.tagName));
  if(tocado){toast('⚠️ Este expediente cambió en el Sheet mientras lo revisabas. Antes de guardar, ciérralo y ábrelo de nuevo para ver lo último.',1);return}
