@@ -1,6 +1,6 @@
 {
-  "version": "2026.11.25-1",
-  "notas": "Buscar por DNI",
+  "version": "2026.11.27-1",
+  "notas": "Registro del cliente (ver y corregir BASE MAESTRA)",
   "archivos": [
     "Ruta",
     "Comisiones",
@@ -13,7 +13,8 @@
     "Plantillas",
     "Avisos",
     "Rapido",
-    "Paquete"
+    "Paquete",
+    "Registro"
   ],
   "sha256": {
     "Ruta": "da3a8e6a0cb2692ea12031e285aee5c4fc8447f8fa5d0b684dbe44d333df8ec6",
@@ -27,7 +28,8 @@
     "Plantillas": "26652fa31aa7324599bb4a1f58977b2abe7dd772ed27630e3470d8d84dbf886f",
     "Avisos": "95c43b288b70f15c98f27f82a0eded766ac536a547e0dde1f3a3d120fdf19747",
     "Rapido": "50c82e0b65202c37c3b42c892c9b190be2faa02cd19f8158df8405c474403607",
-    "Paquete": "0b2ed5a06da0d34e3419b4cac31ecfa1a231fcc59b3e451fd75ca38214f40198"
+    "Paquete": "0b2ed5a06da0d34e3419b4cac31ecfa1a231fcc59b3e451fd75ca38214f40198",
+    "Registro": "d70375b0134b3bc2721d551c3d0058b5bc283e5e16887a8a845366eaaf840b44"
   },
-  "firma": "63614b8db3ca3f8f2e68d40510771bde0f735c801c8dc737ced27d285011d068"
+  "firma": "2f193e148593468d414c57abaa572373ab6ff2b86085ce699a60fb7ec7751b04"
 }

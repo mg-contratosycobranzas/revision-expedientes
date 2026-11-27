@@ -15,6 +15,7 @@ const REG_FILA_TIT = 4;   // fila de títulos de BASE MAESTRA
 
 try {
   ['registroVer', 'registroGuardar'].forEach(f => { if (API_PUBLICA.indexOf(f) < 0) API_PUBLICA.push(f); });
+  if (SOLO_LECTURA.indexOf('registroVer') < 0) SOLO_LECTURA.push('registroVer');   // también en "Ver como"
 } catch (e) {}
 try { ['registro_ver', 'registro_editar'].forEach(p => { if (PERMISOS.indexOf(p) < 0) PERMISOS.push(p); }); } catch (e) {}
 
@@ -84,7 +85,8 @@ function registroGuardar(token, id, cambios) {
   cambios = cambios || {};
   const lock = LockService.getScriptLock(); lock.waitLock(20000);
   try {
-    const r = regFila_(token, id), opc = regOpciones_(r.bm, r.fila), log = [];
+    const r = regFila_(token, id), opc = regOpciones_(r.bm, r.fila), log = [], plan = [];
+    // 1) se validan TODOS los datos antes de escribir ninguno: si uno está mal, no se cambia nada
     Object.keys(cambios).forEach(c => {
       if (REG_COLS.indexOf(c) < 0) throw new Error('La columna ' + c + ' no se puede corregir desde el portal.');
       const cel = r.bm.getRange(r.fila, regCol_(c)), antes = String(cel.getDisplayValue()).trim();
@@ -94,7 +96,7 @@ function registroGuardar(token, id, cambios) {
         escribir = new Date(+m[1], +m[2] - 1, +m[3]);
         if (regISO_(cel.getValue()) === nv) return;
       } else if (nv && REG_MONTO[c]) {
-        const n = Number(nv.replace(/[^\d.\-]/g, '')); if (isNaN(n)) throw new Error('Monto no válido: ' + nv);
+        const n = Number(nv.replace(/[^\d.\-]/g, '')); if (!/\d/.test(nv) || isNaN(n)) throw new Error('Monto no válido: ' + nv);
         escribir = n; if (Number(cel.getValue()) === n) return;
       } else if (nv && REG_DOC[c]) {
         nv = nv.replace(/\D/g, ''); if ([8, 9, 11].indexOf(nv.length) < 0) throw new Error('El DNI / CE / RUC debe tener 8, 9 u 11 dígitos.');
@@ -103,13 +105,15 @@ function registroGuardar(token, id, cambios) {
         if (nv && opc[c] && opc[c].indexOf(nv) < 0) throw new Error('"' + nv + '" no está en la lista de ' + c + '.');
         if (antes === nv) return;
       }
-      cel.setValue(escribir);
-      log.push(c + ': ' + (antes || '(vacío)') + ' → ' + (nv || '(vacío)'));
+      plan.push({ cel: cel, escribir: escribir, txt: c + ': ' + (antes || '(vacío)') + ' → ' + (nv || '(vacío)') });
     });
-    if (log.length) {
-      log_(u.nombre, 'REGISTRO_CORREGIDO', r.ex.id + ' · ' + log.join(' · '));
-      try { tocarDatos_(); } catch (e) {}
-    }
+    // 2) se escribe y cada cambio queda en su propia fila de LOG_WEB (log_ guarda hasta 300 caracteres por fila)
+    plan.forEach(p => {
+      p.cel.setValue(p.escribir);
+      log.push(p.txt);
+      log_(u.nombre, 'REGISTRO_CORREGIDO', r.ex.id + ' · ' + p.txt);
+    });
+    if (log.length) try { tocarDatos_(); } catch (e) {}
     return { cambios: log.length, detalle: log, registro: registroVer(token, id) };
   } finally { lock.releaseLock(); }
 }
